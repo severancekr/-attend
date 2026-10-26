@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>출근 체크</title>
+<style>
+  :root { --bg:#f3f5fa; --card:#ffffff; --text:#1c2333; --sub:#6b7487; --line:#e3e7ef;
+    --blue:#1f5fd6; --red:#d93025; --orange:#d97706; --green:#16a34a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#11151d; --card:#1b212c; --text:#e9edf4; --sub:#9aa3b6; --line:#2b3240;
+      --blue:#6ea0ff; --red:#ff6b5e; --orange:#fbbf24; --green:#4ade80; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif; -webkit-text-size-adjust:100%; }
+  .wrap { max-width:480px; margin:0 auto; padding:22px 16px 40px; }
+  .brand { color:var(--sub); font-size:13px; text-align:center; margin-bottom:12px; }
+  .card { background:var(--card); border-radius:18px; padding:22px 18px; box-shadow:0 2px 12px rgba(0,0,0,.06); margin-bottom:14px; }
+  .hidden { display:none !important; }
+  .icon { font-size:52px; text-align:center; line-height:1.1; }
+  .title { font-size:23px; font-weight:800; text-align:center; margin:10px 0 6px; }
+  .desc { color:var(--sub); font-size:15px; text-align:center; line-height:1.6; }
+  .row { display:flex; justify-content:space-between; gap:12px; padding:11px 0; border-bottom:1px solid var(--line); font-size:15px; }
+  .row:last-child { border-bottom:0; }
+  .row span:first-child { color:var(--sub); }
+  .row b { font-weight:700; text-align:right; }
+  .ok { color:var(--blue); } .late { color:var(--red); } .warn { color:var(--orange); } .good { color:var(--green); }
+  h1 { font-size:21px; margin:0 0 6px; }
+  .note { background:rgba(31,95,214,.08); color:var(--text); border-radius:10px; padding:10px 12px; font-size:14px; line-height:1.55; margin:12px 0 4px; }
+  label.f { display:block; font-size:14px; color:var(--sub); margin:16px 0 6px; }
+  input[type=text] { width:100%; padding:14px 12px; font-size:17px; border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--text); }
+  .consent { border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-top:18px; font-size:13.5px; line-height:1.65; }
+  .consent summary { cursor:pointer; font-weight:700; font-size:15px; }
+  .consent h3 { font-size:13.5px; margin:12px 0 2px; }
+  .consent p, .consent ul { margin:2px 0; }
+  .consent ul { padding-left:18px; }
+  .check { display:flex; gap:10px; align-items:flex-start; margin-top:16px; font-size:15px; font-weight:600; }
+  .check input { width:22px; height:22px; margin:0; flex:none; }
+  button.main { width:100%; margin-top:20px; padding:16px; font-size:17px; font-weight:800; border:0; border-radius:14px; background:var(--blue); color:#fff; }
+  button.main:disabled { opacity:.4; }
+  .err { background:rgba(217,48,37,.1); color:var(--red); border-radius:10px; padding:11px 12px; font-size:14px; margin-top:14px; line-height:1.5; }
+  .spin { width:44px; height:44px; margin:20px auto; border:4px solid var(--line); border-top-color:var(--blue); border-radius:50%; animation:sp 0.9s linear infinite; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand" id="brand"></div>
+
+  <!-- 로딩 -->
+  <div class="card" id="vLoading">
+    <div class="spin"></div>
+    <div class="desc" id="loadingText">확인 중...</div>
+  </div>
+
+  <!-- 결과/안내 -->
+  <div class="card hidden" id="vInfo">
+    <div class="icon" id="infoIcon"></div>
+    <div class="title" id="infoTitle"></div>
+    <div class="desc" id="infoText"></div>
+    <div id="infoRows" style="margin-top:14px"></div>
+  </div>
+
+  <!-- 등록 -->
+  <div class="card hidden" id="vForm">
+    <h1>출근 기기 등록</h1>
+    <div class="desc" style="text-align:left">처음 한 번만 등록하면, 다음부터는 근무지 화면의 QR만 찍으면 출근이 기록됩니다.</div>
+    <div class="note hidden" id="formNote"></div>
+    <label class="f" for="fName">이름</label>
+    <input id="fName" type="text" maxlength="20" autocomplete="name" placeholder="예: 홍길동">
+    <label class="f" for="fEmp">사번</label>
+    <input id="fEmp" type="text" maxlength="20" inputmode="numeric" autocomplete="off" placeholder="예: 1001">
+
+    <div class="consent">
+      <details id="consentBox">
+        <summary>개인정보 수집·이용 동의서 (눌러서 전체 보기)</summary>
+        <div id="consentText"></div>
+      </details>
+    </div>
+    <label class="check"><input type="checkbox" id="fAgree"> 위 내용을 확인했으며, 개인정보 수집·이용에 동의합니다. (필수)</label>
+
+    <button class="main" id="fBtn" disabled>등록하기</button>
+    <div class="err hidden" id="fErr"></div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  var CONSENT_VERSION = 'v1';
+  var TOKEN_KEY = 'att_device_token';
+  var $ = function (id) { return document.getElementById(id); };
+  var regCode = null;
+
+  var company = (ATT.cfg.COMPANY_NAME || '회사');
+  var contact = (ATT.cfg.CONTACT || '관리자');
+  $('brand').textContent = company + ' 출근 관리';
+  $('consentText').innerHTML =
+    '<p>' + ATT.esc(company) + '은(는) 출근 기록 관리를 위해 아래와 같이 개인정보를 수집·이용합니다.</p>' +
+    '<h3>1. 수집·이용 목적</h3><p>출근 기록 확인, 근무 시간 관리, 근태 관련 행정 처리</p>' +
+    '<h3>2. 수집 항목</h3><ul>' +
+    '<li>이름, 사번, 소속 근무지</li>' +
+    '<li>출근 일시(날짜·요일·시간), 근무 구분(주간/야간), 출근 처리한 근무지</li>' +
+    '<li>기기 식별값: 본인 확인을 위해 휴대폰 브라우저에 저장되는 임의의 등록 코드<br>' +
+    '(전화번호, 위치정보, 사진, 연락처 등 휴대폰 안의 다른 정보는 수집하지 않습니다)</li></ul>' +
+    '<h3>3. 보유 및 이용 기간</h3><p>재직 기간 동안 보유하며, 퇴직 후에는 근로기준법상 서류 보존 기간인 3년간 보관한 뒤 지체 없이 파기합니다.</p>' +
+    '<h3>4. 보관 장소</h3><p>회사가 관리하는 Google 클라우드(Google 시트)에 저장되며, Google의 서버는 국외에 위치할 수 있습니다. 열람은 회사가 지정한 관리자로 한정됩니다.</p>' +
+    '<h3>5. 동의를 거부할 권리 및 불이익</h3><p>귀하는 동의를 거부할 권리가 있습니다. 거부하더라도 인사상 불이익은 없으며, 이 경우 QR 출근 대신 관리자가 별도로 출근을 확인·기록합니다.</p>' +
+    '<h3>6. 정보주체의 권리</h3><p>귀하는 언제든지 본인 정보의 열람, 정정, 삭제, 처리 정지 및 동의 철회를 ' + ATT.esc(contact) + '에게 요청할 수 있습니다.</p>' +
+    '<p style="color:var(--sub);margin-top:10px">동의서 버전 ' + CONSENT_VERSION + '</p>';
+
+  function view(id) {
+    ['vLoading', 'vInfo', 'vForm'].forEach(function (v) { $(v).classList.toggle('hidden', v !== id); });
+    window.scrollTo(0, 0);
+  }
+  function loading(t) { $('loadingText').textContent = t || '확인 중...'; view('vLoading'); }
+  function info(icon, title, text, rowsHtml) {
+    $('infoIcon').textContent = icon;
+    $('infoTitle').textContent = title;
+    $('infoText').innerHTML = text || '';
+    $('infoRows').innerHTML = rowsHtml || '';
+    view('vInfo');
+  }
+  function row(k, v, cls) {
+    return '<div class="row"><span>' + ATT.esc(k) + '</span><b class="' + (cls || '') + '">' + ATT.esc(v) + '</b></div>';
+  }
+
+  /* ── 앱 내장 브라우저(카카오톡 등) 탈출 ── */
+  function escapeInApp() {
+    var ua = navigator.userAgent || '';
+    if (/KAKAOTALK/i.test(ua)) {
+      location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+      info('↗', '기본 브라우저로 여는 중이에요',
+        '자동으로 열리지 않으면 오른쪽 아래(또는 위) <b>⋮ 메뉴 → 다른 브라우저로 열기</b>를 눌러주세요.<br>카카오톡 안에서 등록하면 다음 출근 때 인식되지 않아요.');
+      return true;
+    }
+    if (/\bLine\//i.test(ua) && location.search.indexOf('openExternalBrowser=1') < 0) {
+      var u = new URL(location.href); u.searchParams.set('openExternalBrowser', '1'); location.replace(u.toString());
+      return true;
+    }
+    if (/NAVER\(inapp|Instagram|FBAN|FBAV|DaumApps|BAND\/|everytimeApp|SamsungBrowser\/.*CrossApp/i.test(ua)) {
+      info('↗', '기본 브라우저에서 열어주세요',
+        '지금은 다른 앱 안에서 열린 화면이에요.<br>메뉴에서 <b>다른 브라우저로 열기</b>를 누르거나, <b>휴대폰 기본 카메라 앱</b>으로 QR을 찍어주세요.');
+      return true;
+    }
+    return false;
+  }
+
+  /* ── 등록 ── */
+  async function startRegister(code, note) {
+    regCode = code || null;
+    $('fErr').classList.add('hidden');
+    var notes = [];
+    if (note) notes.push(note);
+    if (code) {
+      loading('등록 링크 확인 중...');
+      try {
+        var r = await ATT.api('regInfo', { code: code });
+        if (r.ok) {
+          notes.push('<b>' + ATT.esc(r.masked) + '</b>님 전용 등록 링크입니다' + (r.siteName ? ' (' + ATT.esc(r.siteName) + ')' : '') + '. 등록 즉시 사용할 수 있어요.');
+        } else {
+          regCode = null;
+          notes.push('등록 링크가 만료되었거나 이미 사용되었어요. 아래에서 일반 등록을 하면 <b>관리자 승인 후</b> 사용할 수 있어요.');
+        }
+      } catch (e) {
+        info('📶', '인터넷 연결을 확인해주세요', ATT.esc(e.message));
+        return;
+      }
+    } else {
+      notes.push('일반 등록은 <b>관리자 승인 후</b> 사용할 수 있어요.');
+    }
+    if (ATT.store.get(TOKEN_KEY)) notes.push('이 휴대폰은 이미 등록되어 있어요. 다시 등록하면 기존 등록이 바뀝니다.');
+    $('formNote').innerHTML = notes.join('<br>');
+    $('formNote').classList.toggle('hidden', notes.length === 0);
+    view('vForm');
+  }
+
+  function updateBtn() {
+    $('fBtn').disabled = !($('fAgree').checked && $('fName').value.trim() && $('fEmp').value.trim());
+  }
+  ['fName', 'fEmp'].forEach(function (id) { $(id).addEventListener('input', updateBtn); });
+  $('fAgree').addEventListener('change', updateBtn);
+
+  $('fBtn').addEventListener('click', async function () {
+    var name = $('fName').value.trim(), empNo = $('fEmp').value.trim();
+    $('fErr').classList.add('hidden');
+    if (!ATT.store.works()) {
+      $('fErr').textContent = '이 브라우저에서는 등록 정보를 저장할 수 없어요. 시크릿(비공개) 모드를 끄고 일반 모드에서 다시 열어주세요.';
+      $('fErr').classList.remove('hidden');
+      return;
+    }
+    $('fBtn').disabled = true;
+    var token = ATT.randomHex(32);
+    try {
+      var res = await ATT.api('register', { code: regCode, name: name, empNo: empNo, token: token, consent: true, consentVersion: CONSENT_VERSION });
+      if (!res.ok) throw new Error(res.error);
+      ATT.store.set(TOKEN_KEY, token);
+      if (res.status === '사용중') {
+        info('🎉', '등록 완료!', ATT.esc(res.name) + '님, 이제부터 근무지 화면의 QR을 <b>휴대폰 기본 카메라</b>로 찍으면 바로 출근이 기록됩니다.');
+      } else {
+        info('📝', '등록 신청 완료', ATT.esc(res.name) + '님의 등록 신청이 접수되었어요.<br><b>관리자 승인 후</b> QR 출근을 사용할 수 있어요.');
+      }
+    } catch (e) {
+      $('fErr').textContent = e.message;
+      $('fErr').classList.remove('hidden');
+      $('fBtn').disabled = false;
+    }
+  });
+
+  /* ── 출근 ── */
+  async function doCheckin(token, s, w, c) {
+    loading('출근 확인 중...');
+    var res;
+    try {
+      res = await ATT.api('checkin', { token: token, s: s, w: w, c: c });
+    } catch (e) {
+      info('📶', '인터넷 연결을 확인해주세요', '연결이 불안정해요. 와이파이나 데이터를 확인한 뒤 화면의 새 QR을 다시 찍어주세요.');
+      return;
+    }
+    if (res.ok) {
+      var r = res.record;
+      // 직원 화면에는 정상/늦음 구분을 표시하지 않음 (관리자 프로그램·구글 시트에만 기록)
+      var rows = row('이름', r.name) + row('근무일', r.date + ' (' + r.wd + ')') + row('근무 구분', r.shift) +
+        row('출근 시각', r.time) + row('근무지', r.siteName);
+      if (res.duplicate) {
+        info('ℹ️', '이미 출근 처리되었어요', '이번 근무의 출근은 처음 찍은 시각으로 기록되어 있어요.', rows);
+      } else {
+        info('✅', '출근 완료!', '좋은 하루 보내세요!', rows);
+        try { if (navigator.vibrate) navigator.vibrate(120); } catch (e) { }
+      }
+      return;
+    }
+    if (res.code === 'QR_EXPIRED') {
+      info('⌛', 'QR 유효 시간이 지났어요', '근무지 화면에 보이는 <b>새 QR</b>을 다시 찍어주세요.');
+    } else if (res.code === 'NOT_REGISTERED') {
+      ATT.store.del(TOKEN_KEY);
+      startRegister(null, '등록 정보가 없어요(휴대폰 변경, 관리자 초기화 등). 다시 등록해주세요.');
+    } else if (res.code === 'PENDING') {
+      info('⏳', '관리자 승인을 기다리는 중이에요', '승인되면 바로 QR 출근을 사용할 수 있어요. 급하면 ' + ATT.esc(contact) + '에게 말씀해주세요.');
+    } else {
+      info('⚠️', '출근 처리에 실패했어요', ATT.esc(res.error || '알 수 없는 오류'));
+    }
+  }
+
+  /* ── 시작 ── */
+  (function init() {
+    if (escapeInApp()) return;
+    if (!ATT.apiReady()) { info('⚙️', '설정이 필요해요', 'config.js에 서버 주소가 없습니다. 관리자에게 문의하세요.'); return; }
+    var p = new URLSearchParams(location.search);
+    var reg = p.get('reg'), s = p.get('s'), w = p.get('w'), c = p.get('c');
+    if (s || w || c) {
+      try { history.replaceState(null, '', location.pathname); } catch (e) { }
+    }
+    var token = ATT.store.get(TOKEN_KEY);
+    if (reg) { startRegister(reg.trim().toUpperCase()); return; }
+    if (s && w && c) {
+      if (token) { doCheckin(token, s, w, c); return; }
+      startRegister(null, '처음 사용하는 휴대폰이에요. 먼저 등록해주세요.');
+      return;
+    }
+    if (token) {
+      info('📱', '등록된 휴대폰이에요', '근무지 화면의 QR을 <b>휴대폰 기본 카메라</b>로 찍으면 출근이 기록됩니다.');
+    } else {
+      startRegister(null);
+    }
+  })();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>출근 QR</title>
+<style>
+  :root { --bg:#0e1320; --panel:#171e2e; --text:#f1f4fa; --sub:#9aa6bf; --blue:#4d8dff; --green:#2ecc71;
+    --orange:#f5a524; --red:#ff5d52; --line:#2a3350; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--text);
+    font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif; overflow:hidden; }
+  .hidden { display:none !important; }
+
+  /* 메인 화면 */
+  #main { height:100%; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:3vh 3vw; }
+  .top { text-align:center; }
+  #siteName { font-size:clamp(28px,4.6vh,56px); font-weight:800; letter-spacing:-0.5px; }
+  #pcName { color:var(--sub); font-size:clamp(14px,2vh,22px); margin-top:4px; }
+  #mode { display:inline-block; margin-top:1.6vh; padding:.6vh 2.2vh; border-radius:999px; font-size:clamp(18px,2.8vh,32px); font-weight:700; }
+  #mode.day { background:rgba(77,141,255,.18); color:#8bb4ff; }
+  #mode.night { background:rgba(155,110,255,.2); color:#c3a8ff; }
+  .center { display:flex; flex-direction:column; align-items:center; }
+  #qrBox { background:#fff; padding:2.2vh; border-radius:18px; line-height:0; }
+  #qrBox img, #qrBox canvas { display:block; }
+  #guide { margin-top:2vh; font-size:clamp(18px,2.8vh,30px); font-weight:600; }
+  .barWrap { width:min(60vh,80vw); height:10px; background:var(--line); border-radius:99px; margin-top:1.6vh; overflow:hidden; }
+  #bar { height:100%; width:100%; background:var(--blue); border-radius:99px; transition:width .25s linear; }
+  #remain { color:var(--sub); margin-top:.8vh; font-size:clamp(13px,1.8vh,18px); }
+  .bottom { width:100%; display:flex; justify-content:space-between; align-items:flex-end; }
+  #clock { font-size:clamp(30px,6vh,70px); font-weight:800; font-variant-numeric:tabular-nums; }
+  #date { color:var(--sub); font-size:clamp(14px,2vh,22px); }
+  .status { text-align:right; color:var(--sub); font-size:clamp(13px,1.8vh,18px); }
+  .stLine { display:flex; align-items:center; justify-content:flex-end; gap:10px; }
+  #keyInfo { margin-top:4px; font-size:clamp(11px,1.5vh,14px); opacity:.7; }
+  .dot { width:12px; height:12px; border-radius:50%; background:var(--sub); flex:none; }
+  .dot.on { background:var(--green); box-shadow:0 0 8px var(--green); }
+  .dot.off { background:var(--orange); }
+  .dot.bad { background:var(--red); }
+  #gear { background:none; border:0; color:var(--sub); font-size:22px; cursor:pointer; opacity:.4; }
+  #gear:hover { opacity:1; }
+  #alert { position:fixed; inset:0; background:rgba(10,12,20,.94); display:flex; align-items:center; justify-content:center; text-align:center; padding:24px; }
+  #alert .box { max-width:680px; }
+  #alert h2 { font-size:30px; color:var(--red); margin:0 0 12px; }
+  #alert p { font-size:18px; line-height:1.6; }
+
+  /* 설정 화면 */
+  #setup { height:100%; display:flex; align-items:center; justify-content:center; padding:16px; overflow:auto; }
+  .card { width:100%; max-width:520px; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:28px 24px; }
+  .card h1 { margin:0 0 6px; font-size:24px; }
+  .card p { color:var(--sub); margin:0 0 14px; font-size:14px; line-height:1.6; }
+  .card label { display:block; margin:14px 0 6px; font-size:14px; color:var(--sub); }
+  .card input, .card select { width:100%; padding:12px; font-size:16px; border-radius:10px; border:1px solid var(--line); background:#0f1524; color:var(--text); }
+  .card button { width:100%; margin-top:22px; padding:14px; font-size:17px; font-weight:700; border:0; border-radius:12px; background:var(--blue); color:#fff; cursor:pointer; }
+  .card button.sub { background:transparent; border:1px solid var(--line); color:var(--sub); margin-top:10px; font-size:14px; padding:10px; }
+  .card button:disabled { opacity:.5; }
+  .netBox { padding:10px 12px; border-radius:10px; font-size:14px; line-height:1.55; margin-bottom:6px; }
+  .netBox.on { background:rgba(46,204,113,.12); color:#7ee2a8; }
+  .netBox.off { background:rgba(245,165,36,.12); color:#f8c46b; }
+  .netBox.wait { background:rgba(154,166,191,.12); color:var(--sub); }
+  .hint { color:var(--sub); font-size:13px; margin-top:6px; line-height:1.5; }
+  .row2 { display:flex; gap:10px; }
+  .row2 > div { flex:1; }
+  #sCheck { font-family:Consolas,monospace; color:#ffd479; font-weight:700; }
+  .err { color:var(--red); font-size:14px; margin-top:12px; min-height:20px; line-height:1.5; }
+</style>
+</head>
+<body>
+
+<div id="setup" class="hidden">
+  <div class="card">
+    <h1>근무지 QR 화면 설정</h1>
+    <p>이 PC에 출근 QR을 띄우기 위한 첫 설정입니다. 한 번만 하면 다음부터는 이 화면을 열기만 하면 됩니다.</p>
+    <div class="netBox wait" id="sNet">인터넷 연결 확인 중...</div>
+
+    <label for="sSite">근무지</label>
+    <select id="sSite"><option value="">불러오는 중...</option></select>
+    <div id="sManual" class="row2 hidden">
+      <div><label for="sCode">근무지 코드</label><input id="sCode" type="text" maxlength="20" placeholder="예: SC-PEDI"></div>
+      <div><label for="sName">근무지 이름</label><input id="sName" type="text" maxlength="40" placeholder="예: 전문센터 - 소아재활"></div>
+    </div>
+
+    <label for="sPc">PC 이름 (관리자 화면에서 구분용, 예: 본관1층-안내데스크)</label>
+    <input id="sPc" type="text" maxlength="40" placeholder="예: 본관1층-안내데스크">
+
+    <label for="sKey">QR 비밀키 (관리자 프로그램 [설정] 탭 또는 구글 시트 '설정' 탭)</label>
+    <input id="sKey" type="password" autocomplete="off">
+    <div class="hint">키 확인코드: <span id="sCheck">------</span> &nbsp;← 관리자 프로그램 [설정] 탭의 확인코드와 같아야 합니다</div>
+
+    <div id="sOffline" class="hidden">
+      <label for="sIv">QR 바뀌는 간격(초)</label>
+      <input id="sIv" type="number" min="10" max="300" value="30">
+      <div class="hint">구글 시트 '설정' 탭의 QR갱신초와 <b>반드시 같은 값</b>이어야 합니다. 인터넷이 없어서 자동으로 확인할 수 없어요.</div>
+    </div>
+
+    <button id="sBtn">설정 완료</button>
+    <button id="sRetry" class="sub">인터넷 연결 다시 확인</button>
+    <div class="err" id="sErr"></div>
+  </div>
+</div>
+
+<div id="main" class="hidden">
+  <div class="top">
+    <div id="siteName">-</div>
+    <div id="pcName">-</div>
+    <div id="mode" class="day">-</div>
+  </div>
+  <div class="center">
+    <div id="qrBox"><div id="qr"></div></div>
+    <div id="guide">📱 휴대폰 카메라로 QR을 찍어주세요</div>
+    <div class="barWrap"><div id="bar"></div></div>
+    <div id="remain">-</div>
+  </div>
+  <div class="bottom">
+    <div>
+      <div id="clock">--:--:--</div>
+      <div id="date">-</div>
+    </div>
+    <div class="status">
+      <div class="stLine"><span class="dot" id="dot"></span><span id="stText">연결 확인 중</span>
+        <button id="gear" title="이 PC 설정 초기화">⚙</button></div>
+      <div id="keyInfo"></div>
+    </div>
+  </div>
+</div>
+
+<div id="alert" class="hidden"><div class="box">
+  <h2 id="alertTitle"></h2><p id="alertText"></p>
+  <div class="card" style="margin-top:18px" id="alertBtnBox"><button id="alertBtn">이 PC 다시 설정하기</button></div>
+</div></div>
+
+<script src="qrcode.min.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  var KEY = 'att_kiosk';
+  var DEFAULT_CONF = { interval: 30, day: 480, night: 1080, nightOpen: 900, dayOpen: 1320, grace: 0 };
+  var K = null;
+  var conf = Object.assign({}, DEFAULT_CONF);
+  var offset = 0, lastW = -1, qr = null, qrSize = 0, ip = '', ipAt = 0, busy = false, wakeLock = null;
+  var online = false, everOnline = false, setupOnline = false, serverSites = [];
+  var BASE = ATT.webBase();
+  var $ = function (id) { return document.getElementById(id); };
+  var WD = ['일', '월', '화', '수', '목', '금', '토'];
+
+  function now() { return Date.now() + offset; }
+  function kst(t) { return new Date(t + 9 * 3600 * 1000); }
+  function p2(n) { return String(n).padStart(2, '0'); }
+  function hm(min) { return p2(Math.floor(min / 60)) + ':' + p2(min % 60); }
+  function saveK() { ATT.store.set(KEY, JSON.stringify(K)); }
+
+  function modeOf(t) {
+    var d = kst(t), m = d.getUTCHours() * 60 + d.getUTCMinutes();
+    if (m >= conf.dayOpen) return { cls: 'day', txt: '☀ 내일 주간 출근 접수 중 (' + hm(conf.day) + ')' };
+    if (m >= conf.nightOpen) return { cls: 'night', txt: '🌙 야간 출근 접수 중 (' + hm(conf.night) + ')' };
+    return { cls: 'day', txt: '☀ 주간 출근 접수 중 (' + hm(conf.day) + ')' };
+  }
+
+  function showAlert(title, text, withBtn) {
+    $('alertTitle').textContent = title;
+    $('alertText').innerHTML = text;
+    $('alertBtnBox').classList.toggle('hidden', !withBtn);
+    $('alert').classList.remove('hidden');
+  }
+
+  /* ───────── 설정 화면 ───────── */
+  function fillSites(list, allowManual) {
+    var html = '<option value="">근무지를 선택하세요</option>' + list.map(function (s) {
+      return '<option value="' + ATT.esc(s.code) + '">' + ATT.esc(s.name) + ' (' + ATT.esc(s.code) + ')</option>';
+    }).join('');
+    if (allowManual) html += '<option value="__manual__">목록에 없음 - 직접 입력</option>';
+    $('sSite').innerHTML = html;
+    $('sManual').classList.add('hidden');
+  }
+
+  async function checkNet() {
+    var box = $('sNet');
+    box.className = 'netBox wait';
+    box.textContent = '인터넷 연결 확인 중...';
+    $('sErr').textContent = '';
+    setupOnline = false;
+    if (ATT.apiReady()) {
+      try {
+        var res = await ATT.api('config', {}, 8000);
+        if (!res.ok) throw new Error(res.error);
+        setupOnline = true;
+        serverSites = res.sites || [];
+        conf = Object.assign({}, DEFAULT_CONF, res.conf || {});
+        box.className = 'netBox on';
+        box.innerHTML = '✅ <b>인터넷 연결됨</b> - 근무지 목록을 서버에서 불러왔습니다. 비밀키도 서버에서 확인합니다.';
+        fillSites(serverSites, false);
+        $('sOffline').classList.add('hidden');
+        return;
+      } catch (e) { }
+    }
+    box.className = 'netBox off';
+    box.innerHTML = '⚠ <b>인터넷 연결 안 됨 - 오프라인 설정</b><br>이 PC의 시계로 QR을 만듭니다. 직원은 휴대폰 데이터(LTE/5G)로 출근이 기록됩니다.';
+    fillSites(ATT.cfg.SITES || [], true);
+    $('sIv').value = String((K && K.conf && K.conf.interval) || DEFAULT_CONF.interval);
+    $('sOffline').classList.remove('hidden');
+  }
+
+  function showSetup() {
+    $('main').classList.add('hidden');
+    $('alert').classList.add('hidden');
+    $('setup').classList.remove('hidden');
+    $('sErr').textContent = '';
+    if (!BASE) {
+      $('sErr').innerHTML = 'config.js의 <b>WEB_URL</b>(GitHub Pages 주소)을 먼저 넣어주세요. 이 주소가 있어야 직원 휴대폰이 QR을 찍었을 때 출근 페이지가 열립니다.';
+    }
+    checkNet();
+  }
+
+  $('sSite').addEventListener('change', function () {
+    $('sManual').classList.toggle('hidden', $('sSite').value !== '__manual__');
+  });
+
+  $('sKey').addEventListener('input', async function () {
+    var v = $('sKey').value.trim();
+    $('sCheck').textContent = v ? await ATT.keyCheck(v) : '------';
+  });
+
+  $('sRetry').addEventListener('click', checkNet);
+
+  $('sBtn').addEventListener('click', async function () {
+    $('sErr').textContent = '';
+    if (!BASE) { $('sErr').textContent = 'config.js의 WEB_URL(GitHub Pages 주소)을 먼저 넣어주세요.'; return; }
+    var site = $('sSite').value, siteName = '';
+    if (site === '__manual__') {
+      site = $('sCode').value.trim().toUpperCase();
+      siteName = $('sName').value.trim();
+      if (!/^[A-Z0-9-]{1,20}$/.test(site) || !siteName) {
+        $('sErr').textContent = '근무지 코드(영문 대문자·숫자·-)와 이름을 입력하세요. 코드는 구글 시트 근무지 탭과 똑같아야 합니다.';
+        return;
+      }
+    } else {
+      var list = setupOnline ? serverSites : (ATT.cfg.SITES || []);
+      list.forEach(function (s) { if (s.code === site) siteName = s.name; });
+    }
+    var pcName = $('sPc').value.trim(), secret = $('sKey').value.trim();
+    if (!site || !pcName || !secret) { $('sErr').textContent = '근무지, PC 이름, QR 비밀키를 모두 입력하세요.'; return; }
+    if (!ATT.store.works()) { $('sErr').textContent = '이 브라우저는 설정을 저장할 수 없습니다. 시크릿(InPrivate) 창이 아닌 일반 창에서 여세요.'; return; }
+    var kioskId = (K && K.kioskId) || ATT.randomHex(8);
+    $('sBtn').disabled = true;
+    try {
+      if (setupOnline) {
+        var res = await ATT.api('kioskSetup', { secret: secret, site: site, pcName: pcName, kioskId: kioskId, ua: navigator.userAgent });
+        if (!res.ok) throw new Error(res.error);
+        conf = Object.assign({}, DEFAULT_CONF, res.conf || {});
+        K = { site: site, siteName: res.siteName || siteName, pcName: pcName, secret: secret, kioskId: kioskId, conf: conf, setupMode: 'online' };
+      } else {
+        var iv = parseInt($('sIv').value, 10);
+        if (!(iv >= 10 && iv <= 300)) throw new Error('QR 바뀌는 간격은 10~300초 사이로 입력하세요.');
+        var check = await ATT.keyCheck(secret);
+        if (!confirm('오프라인 설정은 비밀키를 서버에서 확인할 수 없습니다.\n\n키 확인코드: ' + check +
+          '\nQR 간격: ' + iv + '초\n\n관리자 프로그램 [설정] 탭의 확인코드·QR 간격과 같은지 확인하셨나요?')) return;
+        conf = Object.assign({}, DEFAULT_CONF, { interval: iv });
+        K = { site: site, siteName: siteName || site, pcName: pcName, secret: secret, kioskId: kioskId, conf: conf, setupMode: 'offline' };
+      }
+      saveK();
+      startMain();
+    } catch (e) {
+      $('sErr').textContent = e.message;
+    } finally {
+      $('sBtn').disabled = false;
+    }
+  });
+
+  /* ───────── 메인 화면 ───────── */
+  var started = false;
+  async function startMain() {
+    $('setup').classList.add('hidden');
+    $('main').classList.remove('hidden');
+    $('siteName').textContent = K.siteName || K.site;
+    $('pcName').textContent = K.pcName;
+    $('keyInfo').textContent = '키 확인코드 ' + (await ATT.keyCheck(K.secret)) + ' · 근무지 코드 ' + K.site;
+    conf = Object.assign({}, DEFAULT_CONF, K.conf || {});
+    lastW = -1;
+    if (!BASE) {
+      showAlert('설정이 필요합니다', 'config.js의 <b>WEB_URL</b>(GitHub Pages 주소)이 비어 있어 QR을 만들 수 없습니다.<br>관리자에게 문의하세요.', false);
+    }
+    if (started) return;
+    started = true;
+    setStatus('wait', '연결 확인 중');
+    heartbeat();
+    setInterval(heartbeat, 60000);
+    setInterval(tick, 250);
+    tick();
+    requestWake();
+  }
+
+  function setStatus(kind, text) {
+    $('dot').className = 'dot ' + ({ on: 'on', off: 'off', bad: 'bad' }[kind] || '');
+    $('stText').textContent = text;
+  }
+
+  async function heartbeat() {
+    if (!ATT.apiReady()) { setStatus('off', '오프라인 모드 · PC 시계 기준 (QR 정상 작동)'); return; }
+    try {
+      if (Date.now() - ipAt > 600000) {
+        try {
+          var ctrl = new AbortController(); var tm = setTimeout(function () { ctrl.abort(); }, 5000);
+          var r = await fetch('https://api.ipify.org?format=json', { cache: 'no-store', signal: ctrl.signal });
+          clearTimeout(tm);
+          ip = (await r.json()).ip || ''; ipAt = Date.now();
+        } catch (e) { }
+      }
+      var k = (await ATT.hmacHex(K.secret, 'hb:' + K.kioskId)).substring(0, 16);
+      var t0 = Date.now();
+      var res = await ATT.api('heartbeat', { kioskId: K.kioskId, site: K.site, pcName: K.pcName, ip: ip, ua: navigator.userAgent, k: k }, 10000);
+      var t1 = Date.now();
+      if (!res.ok) {
+        if (res.code === 'KIOSK_AUTH') {
+          setStatus('bad', 'QR 비밀키 불일치');
+          showAlert('이 PC를 다시 설정해야 합니다',
+            '이 PC의 QR 비밀키가 서버와 다릅니다. 지금 화면의 QR로는 출근이 기록되지 않습니다.<br>' +
+            '(비밀키가 바뀌었거나, 오프라인 설정 때 잘못 입력된 경우)', true);
+        } else {
+          setStatus('bad', res.error || '서버 오류');
+        }
+        return;
+      }
+      offset = res.serverTime - Math.round((t0 + t1) / 2);
+      online = true; everOnline = true;
+      var newConf = Object.assign({}, DEFAULT_CONF, res.conf || {});
+      if (newConf.interval !== conf.interval) lastW = -1;
+      conf = newConf;
+      K.conf = conf;
+      if (res.siteName && res.siteName !== K.siteName) { K.siteName = res.siteName; $('siteName').textContent = K.siteName; }
+      saveK();
+      $('alert').classList.add('hidden');
+      var skew = Math.round(offset / 1000);
+      setStatus('on', '서버 연결 정상' + (Math.abs(skew) >= 5 ? ' · PC 시계 ' + Math.abs(skew) + '초 ' + (skew > 0 ? '느림' : '빠름') + '(자동 보정 중)' : ''));
+    } catch (e) {
+      online = false;
+      setStatus('off', everOnline ? '인터넷 끊김 · 마지막 보정 시각 기준 (QR 정상 작동)' : '오프라인 모드 · PC 시계 기준 (QR 정상 작동)');
+    }
+  }
+
+  function drawQR(text) {
+    var size = Math.floor(Math.min(window.innerWidth * 0.55, window.innerHeight * 0.5));
+    if (!qr || size !== qrSize) {
+      $('qr').innerHTML = '';
+      qrSize = size;
+      qr = new QRCode($('qr'), { text: text, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
+    } else {
+      qr.clear(); qr.makeCode(text);
+    }
+  }
+
+  async function tick() {
+    if (busy || !BASE) return;
+    busy = true;
+    try {
+      var t = now(), iv = conf.interval, w = Math.floor(t / 1000 / iv);
+      var remain = iv - ((t / 1000) % iv);
+      $('bar').style.width = (remain / iv * 100) + '%';
+      $('remain').textContent = Math.ceil(remain) + '초 후 새 QR로 바뀝니다';
+      if (w !== lastW) {
+        var code = (await ATT.hmacHex(K.secret, K.site + ':' + w)).substring(0, 12);
+        var u = new URL('app.html', BASE);
+        u.searchParams.set('s', K.site); u.searchParams.set('w', String(w)); u.searchParams.set('c', code);
+        drawQR(u.toString());
+        lastW = w;
+      }
+      var d = kst(t);
+      $('clock').textContent = p2(d.getUTCHours()) + ':' + p2(d.getUTCMinutes()) + ':' + p2(d.getUTCSeconds());
+      $('date').textContent = d.getUTCFullYear() + '년 ' + (d.getUTCMonth() + 1) + '월 ' + d.getUTCDate() + '일 (' + WD[d.getUTCDay()] + ')';
+      var m = modeOf(t);
+      $('mode').className = m.cls; $('mode').textContent = m.txt;
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function requestWake() {
+    try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { }
+  }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') requestWake(); });
+  window.addEventListener('resize', function () { lastW = -1; });
+
+  function resetPc() {
+    ATT.store.del(KEY);
+    location.reload();
+  }
+  $('gear').addEventListener('click', function () {
+    var v = prompt('이 PC의 QR 설정을 초기화하려면 QR 비밀키를 입력하세요.');
+    if (v === null) return;
+    if (v.trim() === K.secret) resetPc(); else alert('QR 비밀키가 일치하지 않습니다.');
+  });
+  $('alertBtn').addEventListener('click', function () {
+    if (confirm('이 PC 설정을 지우고 새 QR 비밀키로 다시 설정할까요?')) resetPc();
+  });
+
+  /* ───────── 시작 ───────── */
+  try { K = JSON.parse(ATT.store.get(KEY) || 'null'); } catch (e) { K = null; }
+  if (!window.crypto || !crypto.subtle) {
+    document.body.innerHTML = '<p style="padding:30px;font-size:20px;line-height:1.6">이 브라우저에서는 QR을 만들 수 없습니다.<br>' +
+      '크롬 또는 엣지 최신 버전에서, GitHub Pages 주소(https://) 또는 PC에 복사한 kiosk.html 파일로 열어주세요.<br>' +
+      '(http:// 주소로 열면 동작하지 않습니다)</p>';
+  } else if (typeof QRCode === 'undefined') {
+    document.body.innerHTML = '<p style="padding:30px;font-size:20px">QR 라이브러리(qrcode.min.js)를 불러오지 못했습니다. kiosk.html과 같은 폴더에 qrcode.min.js가 있는지 확인하세요.</p>';
+  } else if (K && K.secret && K.site) {
+    startMain();
+  } else {
+    showSetup();
+  }
+})();
+</script>
+</body>
+</html>
