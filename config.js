@@ -8,7 +8,7 @@ window.ATT_CONFIG = {
   WEB_URL: "https://severancekr.github.io/-attend/",
 
   // 개인정보 동의서에 표시되는 회사명과 문의처
-  COMPANY_NAME: "에스텍(세브란스병원)",
+  COMPANY_NAME: "에스텍(세브란스)",
   CONTACT: "담당:02-2227-4915",
 
   // 인터넷이 막힌 PC에서 첫 설정할 때 보여줄 근무지 목록

@@ -237,6 +237,13 @@
   var S = null;                 // { sess, id, name, exp }
   var data = null;              // 마지막 오늘 조회 결과
   var shiftF = '', siteF = null, mineF = false, curTab = 'tToday', refreshing = false, lastUpd = 0;
+  // 늦은 시간 표시: 45 → '45분', 60 → '1시간', 452 → '7시간 32분'
+  function fmtDelay(min) {
+    min = Math.max(0, parseInt(min, 10) || 0);
+    var h = Math.floor(min / 60), m = min % 60;
+    if (!h) return m + '분';
+    return m ? h + '시간 ' + m + '분' : h + '시간';
+  }
   function inTarget(t, r) {
     var ts = t && t.tSites || [];
     return !t || t.tAll || ts.indexOf(String(r.site)) >= 0 || (r.home && ts.indexOf(String(r.home)) >= 0) ||
@@ -408,7 +415,7 @@
       '<div class="tm">' + esc(String(r.time).substring(0, 5)) + '</div>' +
       '<div class="who"><b>' + esc(r.name) + '</b> <span class="badge ' + (r.shift === '주간' ? 'd' : 'n') + '">' + esc(r.shift) + '</span>' +
       '<div>' + (withDate ? esc(r.date) + ' (' + esc(r.wd) + ') · ' : '') + esc(r.siteName) + ' · ' + esc(r.empNo) + '</div></div>' +
-      '<div class="st ' + (late ? 'late' : 'ok') + '">' + (late ? '늦음 ' + r.delay + '분' : '정상') + '</div></div>';
+      '<div class="st ' + (late ? 'late' : 'ok') + '">' + (late ? '늦음 ' + fmtDelay(r.delay) : '정상') + '</div></div>';
   }
 
   /* ── 검색 ── */
@@ -434,7 +441,7 @@
         '<div class="stat"><div class="t">늦은 출근</div><div class="n late">' + r.late + '<small>회</small></div></div></div>';
       if (r.total) {
         h += '<div class="card"><h2>요약</h2><div class="muted">정상 비율 ' + (okN / r.total * 100).toFixed(1) + '%' +
-          (r.late ? ' · 늦은 출근 평균 ' + r.avgDelay + '분' : '') + ' · 대상 ' + r.people + '명</div>' +
+          (r.late ? ' · 늦은 출근 평균 ' + fmtDelay(r.avgDelay) : '') + ' · 대상 ' + r.people + '명</div>' +
           '<div style="margin-top:8px">' + r.months.map(function (m) {
             return '<div class="site"><div class="nm">' + esc(m.ym) + '</div><div class="cnt">정상 ' + (m.total - m.late) + '</div>' +
               '<div class="lt">' + (m.late ? '늦음 ' + m.late : '') + '</div><div class="tot">' + m.total + '</div></div>';
