@@ -5,7 +5,7 @@ window.ATT_CONFIG = {
   API_URL: "https://script.google.com/macros/s/AKfycbyZFmGzXdEMZrVWjNUniJHtjHBMoNzlB3Z4kXrVTNQTOfUE_d5A72OdYbH7XSH3YpXL/exec",
 
   // GitHub Pages 주소 (끝에 / 포함). 인터넷이 막힌 PC에서 만드는 QR도 이 주소로 연결됩니다.
-  WEB_URL: "https://아이디.github.io/attend/",
+  WEB_URL: "https://severancekr.github.io/-attend/",
 
   // 개인정보 동의서에 표시되는 회사명과 문의처
   COMPANY_NAME: "(주)에스텍시스템",
