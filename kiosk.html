@@ -13,14 +13,14 @@
   .hidden { display:none !important; }
 
   /* 메인 화면 */
-  #main { height:100%; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:3vh 3vw; }
+  #main { height:100%; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:2.5vh 3vw; gap:1vh; }
   .top { text-align:center; }
   #siteName { font-size:clamp(28px,4.6vh,56px); font-weight:800; letter-spacing:-0.5px; }
   #pcName { color:var(--sub); font-size:clamp(14px,2vh,22px); margin-top:4px; }
   #mode { display:inline-block; margin-top:1.6vh; padding:.6vh 2.2vh; border-radius:999px; font-size:clamp(18px,2.8vh,32px); font-weight:700; }
   #mode.day { background:rgba(77,141,255,.18); color:#8bb4ff; }
   #mode.night { background:rgba(155,110,255,.2); color:#c3a8ff; }
-  .center { display:flex; flex-direction:column; align-items:center; }
+  .center { flex:1; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; }
   #qrBox { background:#fff; padding:2.2vh; border-radius:18px; line-height:0; }
   #qrBox img, #qrBox canvas { display:block; }
   #guide { margin-top:2vh; font-size:clamp(18px,2.8vh,30px); font-weight:600; }
@@ -28,7 +28,18 @@
   #bar { height:100%; width:100%; background:var(--blue); border-radius:99px; transition:width .25s linear; }
   #remain { color:var(--sub); margin-top:.8vh; font-size:clamp(13px,1.8vh,18px); }
   .bottom { width:100%; display:flex; justify-content:space-between; align-items:flex-end; }
-  #clock { font-size:clamp(30px,6vh,70px); font-weight:800; font-variant-numeric:tabular-nums; }
+  #clock { font-size:clamp(24px,6vh,70px); font-weight:800; font-variant-numeric:tabular-nums; }
+  /* 창을 작게 줄였을 때 */
+  @media (max-width:620px) {
+    .bottom { flex-direction:column; align-items:center; gap:6px; }
+    .status, .stLine { text-align:center; justify-content:center; }
+    #guide { font-size:16px; }
+  }
+  @media (max-height:520px) {
+    #pcName, #remain, #keyInfo { display:none; }
+    #mode { margin-top:4px; }
+    #guide { margin-top:6px; font-size:15px; }
+  }
   #date { color:var(--sub); font-size:clamp(14px,2vh,22px); }
   .status { text-align:right; color:var(--sub); font-size:clamp(13px,1.8vh,18px); }
   .stLine { display:flex; align-items:center; justify-content:flex-end; gap:10px; }
@@ -287,7 +298,7 @@
     $('main').classList.remove('hidden');
     $('siteName').textContent = K.siteName || K.site;
     $('pcName').textContent = K.pcName;
-    $('keyInfo').textContent = '키 확인코드 ' + (await ATT.keyCheck(K.secret)) + ' · 근무지 코드 ' + K.site;
+    $('keyInfo').textContent = '키 확인코드 ' + (await ATT.keyCheck(K.secret)) + ' · 근무지 코드 ' + K.site + ' · F11 전체화면';
     conf = Object.assign({}, DEFAULT_CONF, K.conf || {});
     lastW = -1;
     if (!BASE) {
@@ -351,8 +362,18 @@
     }
   }
 
+  // 창 크기에 맞춰 QR 크기 계산 (위·아래 글자 영역을 뺀 남는 공간)
+  function qrFit() {
+    var c = document.querySelector('.center');
+    var other = $('guide').offsetHeight + document.querySelector('.barWrap').offsetHeight + $('remain').offsetHeight + 40;
+    var pad = 2 * Math.round(window.innerHeight * 0.022) + 4;
+    var byH = c.clientHeight - other - pad;
+    var byW = c.clientWidth * 0.86 - pad;
+    return Math.max(110, Math.min(900, Math.floor(Math.min(byH, byW))));
+  }
+
   function drawQR(text) {
-    var size = Math.floor(Math.min(window.innerWidth * 0.55, window.innerHeight * 0.5));
+    var size = qrFit();
     if (!qr || size !== qrSize) {
       $('qr').innerHTML = '';
       qrSize = size;
@@ -391,7 +412,11 @@
     try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { }
   }
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') requestWake(); });
-  window.addEventListener('resize', function () { lastW = -1; });
+  var resizeTm = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTm);
+    resizeTm = setTimeout(function () { lastW = -1; tick(); }, 150);
+  });
 
   function resetPc() {
     ATT.store.del(KEY);

@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1f5fd6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="출근관리">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>출근관리</title>
+<style>
+  :root { --bg:#f3f5fa; --card:#ffffff; --text:#1c2333; --sub:#6b7487; --line:#e5e8ef; --chip:#eef1f7;
+    --blue:#1f5fd6; --red:#d93025; --orange:#d97706; --green:#16a34a; --purple:#7c4dde; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#10141b; --card:#1a2029; --text:#e9edf4; --sub:#97a1b4; --line:#2a313d; --chip:#232a35;
+      --blue:#6ea0ff; --red:#ff6b5e; --orange:#fbbf24; --green:#4ade80; --purple:#b49aff; }
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif; -webkit-text-size-adjust:100%; }
+  .hidden { display:none !important; }
+  button { font-family:inherit; }
+  .wrap { max-width:560px; margin:0 auto; padding:0 14px calc(84px + env(safe-area-inset-bottom)); }
+
+  /* 상단 */
+  header { position:sticky; top:0; z-index:5; background:var(--bg); padding:calc(10px + env(safe-area-inset-top)) 14px 8px; }
+  .hd { max-width:560px; margin:0 auto; display:flex; align-items:center; gap:10px; }
+  .hd h1 { font-size:20px; margin:0; flex:1; }
+  .upd { font-size:12px; color:var(--sub); text-align:right; line-height:1.3; }
+  .iconbtn { width:38px; height:38px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--text); font-size:18px; }
+  .iconbtn.spin { animation:sp .8s linear infinite; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+
+  /* 공통 카드 */
+  .card { background:var(--card); border-radius:16px; padding:14px; margin-bottom:12px; box-shadow:0 1px 6px rgba(0,0,0,.05); }
+  .card h2 { font-size:15px; margin:0 0 10px; }
+  .muted { color:var(--sub); font-size:13px; }
+  .ok { color:var(--blue); } .late { color:var(--red); } .warn { color:var(--orange); } .good { color:var(--green); }
+
+  /* 날짜/구분 */
+  .datebar { display:flex; align-items:center; gap:8px; margin:4px 0 10px; }
+  .datebar input { flex:1; padding:10px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--text); font-size:16px; text-align:center; }
+  .datebar button { width:44px; height:42px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--text); font-size:16px; }
+  .chips { display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+  .chip { padding:8px 14px; border-radius:999px; border:0; background:var(--chip); color:var(--text); font-size:14px; font-weight:600; }
+  .chip.on { background:var(--blue); color:#fff; }
+  .chip.filter { background:rgba(31,95,214,.12); color:var(--blue); }
+  .nowban { font-size:13px; color:var(--sub); margin:-2px 0 10px; }
+
+  /* 숫자 카드 */
+  .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+  .stat { background:var(--card); border-radius:14px; padding:10px 12px; box-shadow:0 1px 6px rgba(0,0,0,.05); }
+  .stat .t { font-size:12px; color:var(--sub); font-weight:600; }
+  .stat .n { font-size:24px; font-weight:800; margin-top:2px; }
+  .stat .n small { font-size:13px; font-weight:600; margin-left:2px; }
+  .stat.big { grid-column:span 3; display:flex; align-items:baseline; justify-content:space-between; }
+  .stat.big .n { font-size:34px; }
+
+  /* 근무지 */
+  .site { display:flex; align-items:center; padding:10px 2px; border-bottom:1px solid var(--line); gap:8px; }
+  .site:last-child { border-bottom:0; }
+  .site .nm { flex:1; font-size:15px; }
+  .site .nm.zero { color:var(--sub); }
+  .site .cnt { font-size:13px; color:var(--sub); white-space:nowrap; }
+  .site .tot { font-weight:800; font-size:16px; min-width:40px; text-align:right; }
+  .site .lt { color:var(--red); font-size:12px; font-weight:700; min-width:44px; text-align:right; }
+  .site.sel { background:rgba(31,95,214,.08); border-radius:10px; }
+
+  /* 명단 */
+  .person { display:flex; align-items:center; gap:10px; padding:10px 2px; border-bottom:1px solid var(--line); }
+  .person:last-child { border-bottom:0; }
+  .person .tm { font-variant-numeric:tabular-nums; font-weight:700; width:52px; }
+  .person .who { flex:1; min-width:0; }
+  .person .who b { font-size:15px; }
+  .person .who div { font-size:12px; color:var(--sub); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .badge { font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; white-space:nowrap; }
+  .badge.d { background:rgba(31,95,214,.12); color:var(--blue); }
+  .badge.n { background:rgba(124,77,222,.14); color:var(--purple); }
+  .st { font-size:12px; font-weight:700; white-space:nowrap; text-align:right; min-width:58px; }
+  .empty { text-align:center; color:var(--sub); padding:24px 0; font-size:14px; }
+
+  /* 폼 */
+  label.f { display:block; font-size:13px; color:var(--sub); margin:12px 0 6px; }
+  input.tx, select.tx { width:100%; padding:12px; font-size:16px; border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--text); }
+  .row2 { display:flex; gap:8px; } .row2 > * { flex:1; }
+  button.main { width:100%; margin-top:14px; padding:14px; font-size:16px; font-weight:800; border:0; border-radius:14px; background:var(--blue); color:#fff; }
+  button.sub { width:100%; margin-top:10px; padding:12px; font-size:14px; font-weight:700; border:1px solid var(--line); border-radius:14px; background:var(--card); color:var(--text); }
+  button:disabled { opacity:.45; }
+  .err { background:rgba(217,48,37,.1); color:var(--red); border-radius:10px; padding:10px 12px; font-size:14px; margin-top:12px; line-height:1.5; }
+  .note { background:rgba(31,95,214,.08); border-radius:10px; padding:10px 12px; font-size:13px; line-height:1.6; margin-top:10px; }
+
+  /* 알림 스위치 */
+  .sw { display:flex; align-items:center; gap:12px; padding:12px 2px; border-bottom:1px solid var(--line); }
+  .sw:last-of-type { border-bottom:0; }
+  .sw .tx2 { flex:1; } .sw .tx2 b { font-size:15px; } .sw .tx2 div { font-size:12px; color:var(--sub); margin-top:2px; line-height:1.45; }
+  .tog { position:relative; width:52px; height:30px; flex:none; }
+  .tog input { opacity:0; width:0; height:0; }
+  .tog span { position:absolute; inset:0; background:var(--line); border-radius:99px; transition:.2s; }
+  .tog span:before { content:""; position:absolute; width:24px; height:24px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+  .tog input:checked + span { background:var(--blue); }
+  .tog input:checked + span:before { transform:translateX(22px); }
+
+  /* 하단 탭 */
+  nav { position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom); z-index:10; }
+  nav .in { max-width:560px; margin:0 auto; display:flex; }
+  nav button { flex:1; border:0; background:none; color:var(--sub); padding:9px 0 8px; font-size:12px; font-weight:700; }
+  nav button i { display:block; font-style:normal; font-size:20px; margin-bottom:2px; }
+  nav button.on { color:var(--blue); }
+
+  /* 로그인 */
+  #vLogin { max-width:420px; margin:0 auto; padding:calc(48px + env(safe-area-inset-top)) 18px 40px; }
+  .logo { width:72px; height:72px; border-radius:20px; display:block; margin:0 auto 12px; }
+  #vLogin h1 { text-align:center; font-size:22px; margin:0 0 4px; }
+  .check { display:flex; gap:8px; align-items:center; margin-top:12px; font-size:14px; }
+  .check input { width:20px; height:20px; }
+  .chip.mine { background:rgba(217,119,6,.14); color:var(--orange); }
+  .chip.mine.on { background:var(--orange); color:#fff; }
+  .seg { display:flex; background:var(--chip); border-radius:12px; padding:3px; margin:4px 0 10px; }
+  .seg button { flex:1; border:0; background:none; padding:9px 0; border-radius:10px; font-size:14px; font-weight:700; color:var(--sub); }
+  .seg button.on { background:var(--card); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,.1); }
+  h3.sm { font-size:14px; margin:14px 0 8px; }
+  .emplist { max-height:46vh; overflow:auto; border:1px solid var(--line); border-radius:12px; margin-top:8px; }
+  .emp { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--line); font-size:15px; }
+  .emp:last-child { border-bottom:0; }
+  .emp input { width:20px; height:20px; flex:none; }
+  .emp .s { margin-left:auto; font-size:12px; color:var(--sub); text-align:right; }
+  .emp.bysite { opacity:.6; }
+  .tsum { font-size:13px; color:var(--sub); margin-top:10px; line-height:1.5; }
+  .toast { position:fixed; left:50%; bottom:calc(90px + env(safe-area-inset-bottom)); transform:translateX(-50%); background:rgba(28,35,51,.92); color:#fff;
+    padding:10px 16px; border-radius:12px; font-size:14px; z-index:20; max-width:90vw; text-align:center; }
+</style>
+</head>
+<body>
+
+<!-- 로그인 -->
+<div id="vLogin" class="hidden">
+  <img class="logo" src="icon-192.png" alt="">
+  <h1>출근 관리 · 관리자</h1>
+  <div class="muted" style="text-align:center">관리자 PC 프로그램과 같은 아이디로 로그인하세요</div>
+  <div class="card" style="margin-top:20px">
+    <label class="f" for="lId">아이디</label>
+    <input class="tx" id="lId" autocomplete="username" autocapitalize="off">
+    <label class="f" for="lPw">비밀번호</label>
+    <input class="tx" id="lPw" type="password" autocomplete="current-password">
+    <label class="check"><input type="checkbox" id="lKeep" checked> 이 휴대폰에서 로그인 유지 (7일)</label>
+    <button class="main" id="lBtn">로그인</button>
+    <div class="err hidden" id="lErr"></div>
+  </div>
+  <div class="note">
+    <b>앱처럼 쓰기</b><br>
+    안드로이드 크롬: 오른쪽 위 ⋮ → <b>홈 화면에 추가</b><br>
+    아이폰 사파리: 아래 공유 버튼 → <b>홈 화면에 추가</b>
+  </div>
+</div>
+
+<!-- 앱 -->
+<div id="vApp" class="hidden">
+  <header><div class="hd">
+    <h1 id="hTitle">오늘 출근</h1>
+    <div class="upd" id="hUpd"></div>
+    <button class="iconbtn" id="hRef" title="새로고침">↻</button>
+  </div></header>
+
+  <div class="wrap">
+    <!-- 탭: 오늘 -->
+    <section id="tToday">
+      <div class="datebar">
+        <button id="dPrev">◀</button>
+        <input type="date" id="dDate">
+        <button id="dNext">▶</button>
+      </div>
+      <div class="nowban" id="nowBan"></div>
+      <div class="chips" id="shiftChips">
+        <button class="chip on" data-v="">전체</button>
+        <button class="chip" data-v="주간">주간</button>
+        <button class="chip" data-v="야간">야간</button>
+        <button class="chip mine hidden" id="mineChip">⭐ 내 담당</button>
+        <button class="chip filter hidden" id="siteChip"></button>
+      </div>
+      <div class="stats">
+        <div class="stat big"><div><div class="t">출근 인원</div><div class="n" id="sTotal">-</div></div>
+          <div class="muted" id="sSub"></div></div>
+        <div class="stat"><div class="t">주간</div><div class="n" id="sDay">-</div></div>
+        <div class="stat"><div class="t">야간</div><div class="n" id="sNight">-</div></div>
+        <div class="stat"><div class="t">늦은 출근</div><div class="n late" id="sLate">-</div></div>
+      </div>
+      <div class="card"><h2>근무지별 <span class="muted">· 누르면 그 근무지만 보기</span></h2><div id="siteList"></div></div>
+      <div class="card"><h2 id="listTitle">출근자 명단</h2><div id="peopleList"></div></div>
+    </section>
+
+    <!-- 탭: 검색 -->
+    <section id="tSearch" class="hidden">
+      <div class="card">
+        <label class="f" for="qName" style="margin-top:0">이름 또는 사번</label>
+        <input class="tx" id="qName" placeholder="예: 홍길동" enterkeyhint="search">
+        <div class="row2" style="margin-top:8px">
+          <select class="tx" id="qYear"></select>
+          <select class="tx" id="qMonth"></select>
+        </div>
+        <button class="main" id="qBtn">검색</button>
+      </div>
+      <div id="qResult"></div>
+    </section>
+
+    <!-- 탭: 알림 -->
+    <section id="tNoti" class="hidden">
+      <div id="nBody"><div class="empty">불러오는 중...</div></div>
+      <div class="card">
+        <h2>계정</h2>
+        <div class="muted" id="meInfo"></div>
+        <button class="sub" id="logoutBtn">로그아웃</button>
+      </div>
+    </section>
+  </div>
+
+  <nav><div class="in">
+    <button class="on" data-tab="tToday"><i>📊</i>오늘</button>
+    <button data-tab="tSearch"><i>🔎</i>검색</button>
+    <button data-tab="tNoti"><i>🔔</i>알림</button>
+  </div></nav>
+</div>
+
+<div class="toast hidden" id="toast"></div>
+
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  var SKEY = 'att_admin_sess';
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = ATT.esc;
+  var S = null;                 // { sess, id, name, exp }
+  var data = null;              // 마지막 오늘 조회 결과
+  var shiftF = '', siteF = null, mineF = false, curTab = 'tToday', refreshing = false, lastUpd = 0;
+  function inTarget(t, r) {
+    var ts = t && t.tSites || [];
+    return !t || t.tAll || ts.indexOf(String(r.site)) >= 0 || (r.home && ts.indexOf(String(r.home)) >= 0) ||
+      (t.tEmps || []).indexOf(String(r.empNo)) >= 0;
+  }
+  var WD = ['일', '월', '화', '수', '목', '금', '토'];
+
+  /* ── 공통 ── */
+  function toast(msg) {
+    var t = $('toast'); t.textContent = msg; t.classList.remove('hidden');
+    clearTimeout(toast.tm); toast.tm = setTimeout(function () { t.classList.add('hidden'); }, 2200);
+  }
+  function kstToday() {
+    var d = new Date(Date.now() + 9 * 3600000);
+    return d.toISOString().substring(0, 10);
+  }
+  function addDays(ds, n) {
+    var d = new Date(ds + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().substring(0, 10);
+  }
+  function wdOf(ds) { return WD[new Date(ds + 'T00:00:00Z').getUTCDay()]; }
+
+  async function call(action, payload) {
+    var res = await ATT.api(action, Object.assign({ sess: S && S.sess }, payload || {}), 25000);
+    if (!res.ok && res.code === 'SESSION') { logout(true); throw new Error('로그인이 만료되었습니다. 다시 로그인하세요.'); }
+    if (!res.ok) throw new Error(res.error || '오류');
+    return res;
+  }
+
+  /* ── 로그인 ── */
+  function showLogin(msg) {
+    $('vApp').classList.add('hidden'); $('vLogin').classList.remove('hidden');
+    if (msg) { $('lErr').textContent = msg; $('lErr').classList.remove('hidden'); }
+  }
+  $('lBtn').addEventListener('click', async function () {
+    var id = $('lId').value.trim(), pw = $('lPw').value;
+    $('lErr').classList.add('hidden');
+    if (!id || !pw) { $('lErr').textContent = '아이디와 비밀번호를 입력하세요.'; $('lErr').classList.remove('hidden'); return; }
+    if (!ATT.apiReady()) { $('lErr').textContent = 'config.js에 서버 주소가 없습니다.'; $('lErr').classList.remove('hidden'); return; }
+    $('lBtn').disabled = true;
+    try {
+      var res = await ATT.api('login', { id: id, pw: pw }, 25000);
+      if (!res.ok) throw new Error(res.error);
+      S = { sess: res.sess, id: id, name: res.name, exp: Date.now() + 7 * 86400000 - 3600000 };
+      if ($('lKeep').checked) ATT.store.set(SKEY, JSON.stringify(S)); else ATT.store.del(SKEY);
+      $('lPw').value = '';
+      startApp();
+    } catch (e) {
+      $('lErr').textContent = e.message; $('lErr').classList.remove('hidden');
+    } finally { $('lBtn').disabled = false; }
+  });
+  $('lPw').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('lBtn').click(); });
+
+  function logout(expired) {
+    ATT.store.del(SKEY); S = null; data = null;
+    showLogin(expired ? '로그인이 만료되었습니다. 다시 로그인하세요.' : '');
+  }
+  $('logoutBtn').addEventListener('click', function () { if (confirm('로그아웃할까요?')) logout(false); });
+
+  /* ── 탭 ── */
+  document.querySelectorAll('nav button').forEach(function (b) {
+    b.addEventListener('click', function () { openTab(b.getAttribute('data-tab')); });
+  });
+  function openTab(tab) {
+    curTab = tab;
+    document.querySelectorAll('nav button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-tab') === tab); });
+    ['tToday', 'tSearch', 'tNoti'].forEach(function (t) { $(t).classList.toggle('hidden', t !== tab); });
+    $('hTitle').textContent = { tToday: '출근 현황', tSearch: '기록 검색', tNoti: '알림 설정' }[tab];
+    $('hRef').classList.toggle('hidden', tab !== 'tToday');
+    $('hUpd').classList.toggle('hidden', tab !== 'tToday');
+    if (tab === 'tNoti') loadNoti();
+    if (tab === 'tToday' && Date.now() - lastUpd > 20000) loadToday();
+    window.scrollTo(0, 0);
+  }
+
+  /* ── 오늘 ── */
+  $('dDate').value = kstToday();
+  $('dPrev').addEventListener('click', function () { $('dDate').value = addDays($('dDate').value || kstToday(), -1); siteF = null; loadToday(); });
+  $('dNext').addEventListener('click', function () { $('dDate').value = addDays($('dDate').value || kstToday(), 1); siteF = null; loadToday(); });
+  $('dDate').addEventListener('change', function () { siteF = null; loadToday(); });
+  $('hRef').addEventListener('click', function () { loadToday(); });
+  document.querySelectorAll('#shiftChips .chip[data-v]').forEach(function (c) {
+    c.addEventListener('click', function () {
+      shiftF = c.getAttribute('data-v');
+      document.querySelectorAll('#shiftChips .chip[data-v]').forEach(function (x) { x.classList.toggle('on', x === c); });
+      renderToday();
+    });
+  });
+  $('siteChip').addEventListener('click', function () { siteF = null; renderToday(); });
+  $('mineChip').addEventListener('click', function () { mineF = !mineF; renderToday(); });
+
+  async function loadToday() {
+    if (refreshing || !S) return;
+    refreshing = true; $('hRef').classList.add('spin');
+    try {
+      data = await call('mToday', { date: $('dDate').value || kstToday() });
+      lastUpd = Date.now();
+      renderToday();
+    } catch (e) {
+      toast(e.message);
+    } finally {
+      refreshing = false; $('hRef').classList.remove('spin');
+    }
+  }
+
+  function renderToday() {
+    if (!data) return;
+    var d = new Date(lastUpd + 9 * 3600000);
+    $('hUpd').innerHTML = '갱신<br>' + d.toISOString().substring(11, 19);
+    var isToday = data.date === data.today;
+    var nb = '';
+    if (isToday) {
+      var when = data.nowWorkDate > data.today ? '내일 ' : (data.nowWorkDate < data.today ? '어제 ' : '');
+      nb = '지금 ' + when + data.nowShift + ' 출근 접수 중 · 30초마다 자동 갱신';
+    } else {
+      nb = data.date + ' (' + wdOf(data.date) + ') 기록';
+    }
+    $('nowBan').textContent = nb;
+
+    var hasTarget = data.target && !data.target.tAll;
+    if (!hasTarget) mineF = false;
+    $('mineChip').classList.toggle('hidden', !hasTarget);
+    $('mineChip').classList.toggle('on', mineF);
+    var recs = data.records.filter(function (r) { return (!shiftF || r.shift === shiftF) && (!mineF || inTarget(data.target, r)); });
+    var late = recs.filter(function (r) { return r.status === '늦은 출근'; }).length;
+    var people = {}; recs.forEach(function (r) { people[r.empNo] = 1; });
+    $('sTotal').innerHTML = Object.keys(people).length + '<small>명</small>';
+    $('sSub').innerHTML = '<span class="ok">정상 ' + (recs.length - late) + '</span> · <span class="late">늦은 출근 ' + late + '</span>';
+    $('sDay').innerHTML = recs.filter(function (r) { return r.shift === '주간'; }).length + '<small>명</small>';
+    $('sNight').innerHTML = recs.filter(function (r) { return r.shift === '야간'; }).length + '<small>명</small>';
+    $('sLate').innerHTML = late + '<small>명</small>';
+
+    // 근무지별
+    var by = {};
+    recs.forEach(function (r) {
+      var s = by[r.site] || (by[r.site] = { d: 0, n: 0, l: 0, name: r.siteName });
+      if (r.shift === '주간') s.d++; else s.n++;
+      if (r.status === '늦은 출근') s.l++;
+    });
+    var order = data.sites.map(function (s) { return { code: s.code, name: s.name }; });
+    Object.keys(by).forEach(function (c) { if (!data.sites.some(function (s) { return s.code === c; })) order.push({ code: c, name: by[c].name }); });
+    $('siteList').innerHTML = order.map(function (s) {
+      var v = by[s.code] || { d: 0, n: 0, l: 0 }, tot = v.d + v.n;
+      return '<div class="site' + (siteF === s.code ? ' sel' : '') + '" data-code="' + esc(s.code) + '">' +
+        '<div class="nm' + (tot ? '' : ' zero') + '">' + esc(s.name) + '</div>' +
+        '<div class="cnt">주 ' + v.d + ' · 야 ' + v.n + '</div>' +
+        '<div class="lt">' + (v.l ? '늦음 ' + v.l : '') + '</div>' +
+        '<div class="tot">' + tot + '</div></div>';
+    }).join('') || '<div class="empty">근무지가 없습니다</div>';
+    $('siteList').querySelectorAll('.site').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var c = el.getAttribute('data-code'); siteF = (siteF === c) ? null : c; renderToday();
+        if (siteF) $('peopleList').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+
+    // 명단
+    var list = siteF ? recs.filter(function (r) { return r.site === siteF; }) : recs;
+    var siteName = siteF ? ((order.filter(function (s) { return s.code === siteF; })[0] || {}).name || siteF) : '';
+    $('siteChip').classList.toggle('hidden', !siteF);
+    $('siteChip').textContent = siteName + ' ✕';
+    $('listTitle').textContent = (mineF ? '⭐ ' : '') + (siteF ? siteName + ' 출근자 ' : (mineF ? '내 담당 출근자 ' : '출근자 명단 ')) + list.length + '명';
+    list = list.slice().sort(function (a, b) { return (b.shift === '야간') - (a.shift === '야간') || b.time.localeCompare(a.time); });
+    $('peopleList').innerHTML = list.map(personHtml).join('') || '<div class="empty">아직 출근 기록이 없습니다</div>';
+  }
+
+  function personHtml(r, withDate) {
+    var late = r.status === '늦은 출근';
+    return '<div class="person">' +
+      '<div class="tm">' + esc(String(r.time).substring(0, 5)) + '</div>' +
+      '<div class="who"><b>' + esc(r.name) + '</b> <span class="badge ' + (r.shift === '주간' ? 'd' : 'n') + '">' + esc(r.shift) + '</span>' +
+      '<div>' + (withDate ? esc(r.date) + ' (' + esc(r.wd) + ') · ' : '') + esc(r.siteName) + ' · ' + esc(r.empNo) + '</div></div>' +
+      '<div class="st ' + (late ? 'late' : 'ok') + '">' + (late ? '늦음 ' + r.delay + '분' : '정상') + '</div></div>';
+  }
+
+  /* ── 검색 ── */
+  (function initSearch() {
+    var y = parseInt(kstToday().substring(0, 4), 10), h = '<option value="">전체 연도</option>';
+    for (var i = 0; i < 4; i++) h += '<option value="' + (y - i) + '">' + (y - i) + '년</option>';
+    $('qYear').innerHTML = h;
+    var m = '<option value="">전체 월</option>';
+    for (var k = 1; k <= 12; k++) m += '<option value="' + k + '">' + k + '월</option>';
+    $('qMonth').innerHTML = m;
+  })();
+  $('qName').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.target.blur(); $('qBtn').click(); } });
+  $('qBtn').addEventListener('click', async function () {
+    var q = $('qName').value.trim();
+    if (!q) { toast('이름 또는 사번을 입력하세요'); return; }
+    $('qBtn').disabled = true; $('qResult').innerHTML = '<div class="empty">검색 중...</div>';
+    try {
+      var r = await call('mSearch', { q: q, year: $('qYear').value, month: $('qMonth').value });
+      var okN = r.total - r.late;
+      var h = '<div class="stats">' +
+        '<div class="stat"><div class="t">전체</div><div class="n">' + r.total + '<small>회</small></div></div>' +
+        '<div class="stat"><div class="t">정상 출근</div><div class="n ok">' + okN + '<small>회</small></div></div>' +
+        '<div class="stat"><div class="t">늦은 출근</div><div class="n late">' + r.late + '<small>회</small></div></div></div>';
+      if (r.total) {
+        h += '<div class="card"><h2>요약</h2><div class="muted">정상 비율 ' + (okN / r.total * 100).toFixed(1) + '%' +
+          (r.late ? ' · 늦은 출근 평균 ' + r.avgDelay + '분' : '') + ' · 대상 ' + r.people + '명</div>' +
+          '<div style="margin-top:8px">' + r.months.map(function (m) {
+            return '<div class="site"><div class="nm">' + esc(m.ym) + '</div><div class="cnt">정상 ' + (m.total - m.late) + '</div>' +
+              '<div class="lt">' + (m.late ? '늦음 ' + m.late : '') + '</div><div class="tot">' + m.total + '</div></div>';
+          }).join('') + '</div></div>';
+        h += '<div class="card"><h2>출근 기록' + (r.truncated ? ' <span class="muted">(최근 300건)</span>' : '') + '</h2>' +
+          r.records.map(function (x) { return personHtml(x, true); }).join('') + '</div>';
+      } else {
+        h += '<div class="empty">검색 결과가 없습니다</div>';
+      }
+      $('qResult').innerHTML = h;
+    } catch (e) {
+      $('qResult').innerHTML = '<div class="err">' + esc(e.message) + '</div>';
+    } finally { $('qBtn').disabled = false; }
+  });
+
+  /* ── 알림 ── */
+  var noti = null;
+  async function loadNoti() {
+    $('meInfo').textContent = (S.name || S.id) + ' (' + S.id + ')';
+    $('nBody').innerHTML = '<div class="card"><div class="empty">불러오는 중...</div></div>';
+    try { noti = await call('notiGet'); draft = null; renderNoti(); }
+    catch (e) { $('nBody').innerHTML = '<div class="err">' + esc(e.message) + '</div>'; }
+  }
+
+  function swHtml(key, title, desc) {
+    return '<label class="sw"><div class="tx2"><b>' + title + '</b><div>' + desc + '</div></div>' +
+      '<span class="tog"><input type="checkbox" data-k="' + key + '"' + (noti[key] ? ' checked' : '') + '><span></span></span></label>';
+  }
+
+  function renderNoti() {
+    var h = '';
+    if (!noti.botReady) {
+      h = '<div class="card"><h2>휴대폰 알림 준비 안 됨</h2><div class="muted" style="line-height:1.6">' +
+        '총관리자가 텔레그램 알림 봇을 아직 설정하지 않았습니다.<br>설치가이드의 <b>텔레그램 봇 만들기</b>를 마친 뒤 이 화면을 다시 열어주세요.</div></div>';
+    } else if (!noti.linked) {
+      h = '<div class="card"><h2>1. 텔레그램 연결</h2><div class="muted" style="line-height:1.6">' +
+        '알림은 무료 메신저 <b>텔레그램</b>으로 옵니다. 텔레그램 앱을 먼저 설치하고 가입해 주세요.</div>' +
+        '<button class="main" id="tgGo">텔레그램 연결하기</button>' +
+        '<div class="note">① 버튼을 누르면 텔레그램이 열립니다<br>② 아래쪽 <b>[시작]</b>(START) 버튼을 누르세요<br>③ 이 화면으로 돌아와 <b>[연결 확인]</b>을 누르세요</div>' +
+        '<button class="sub" id="tgChk">연결 확인</button></div>';
+    } else {
+      h = '<div class="card"><h2>받을 알림 <span class="good" style="font-size:13px">● 텔레그램 연결됨</span></h2>' +
+        swHtml('late', '⏰ 늦은 출근 알림', '누군가 늦게 출근 체크하면 바로 알림') +
+        swHtml('every', '✅ 모든 출근 알림', '모든 출근마다 알림. 출근 시간대에 수십~백여 개가 올 수 있어요') +
+        swHtml('summary', '📊 출근 현황 요약', '주간·야간 출근 기준 시각 ' + noti.summaryMin + '분 뒤, 근무지별 인원과 늦은 출근자를 한 번에') +
+        '</div><div class="card"><button class="sub" id="tgTest" style="margin-top:0">테스트 알림 보내기</button>' +
+        '<button class="sub" id="tgOff">텔레그램 연결 해제</button>' +
+        '<div class="muted" style="margin-top:10px;line-height:1.5">알림 설정은 관리자마다 따로 저장됩니다. 휴대폰 무음·방해금지 시간은 텔레그램 앱의 알림 설정에서 조절하세요.</div></div>';
+    }
+    h += targetHtml();
+    $('nBody').innerHTML = h;
+    bindTarget();
+
+    if ($('tgGo')) $('tgGo').addEventListener('click', async function () {
+      var w = window.open('', '_blank');
+      try {
+        var r = await call('tgStart');
+        if (w) w.location.href = r.link; else location.href = r.link;
+      } catch (e) { if (w) w.close(); toast(e.message); }
+    });
+    if ($('tgChk')) $('tgChk').addEventListener('click', async function () {
+      this.disabled = true;
+      try {
+        var r = await call('tgCheck');
+        if (r.linked) { noti = Object.assign(noti, r); toast('텔레그램이 연결되었어요'); renderNoti(); }
+        else toast('아직 연결되지 않았어요. 텔레그램에서 [시작]을 눌렀는지 확인하세요');
+      } catch (e) { toast(e.message); }
+      this.disabled = false;
+    });
+    document.querySelectorAll('#nBody input[data-k]').forEach(function (inp) {
+      inp.addEventListener('change', async function () {
+        var p = {}; p[inp.getAttribute('data-k')] = inp.checked;
+        try { var r = await call('notiSet', p); noti = Object.assign(noti, r); toast(inp.checked ? '알림을 켰어요' : '알림을 껐어요'); }
+        catch (e) { inp.checked = !inp.checked; toast(e.message); }
+      });
+    });
+    if ($('tgTest')) $('tgTest').addEventListener('click', async function () {
+      try { await call('tgTest'); toast('테스트 알림을 보냈어요. 텔레그램을 확인하세요'); } catch (e) { toast(e.message); }
+    });
+    if ($('tgOff')) $('tgOff').addEventListener('click', async function () {
+      if (!confirm('텔레그램 연결을 해제할까요? 이 휴대폰으로 알림이 오지 않습니다.')) return;
+      try { var r = await call('tgUnlink'); noti = Object.assign(noti, r); renderNoti(); } catch (e) { toast(e.message); }
+    });
+  }
+
+  /* ── 알림 대상 (내 담당) ── */
+  var draft = null;   // { mode, sites:{code:1}, emps:{empNo:1}, q, site }
+  function targetHtml() {
+    if (!draft) {
+      draft = { mode: noti.tAll ? 'all' : 'pick', sites: {}, emps: {}, q: '', site: '' };
+      (noti.tSites || []).forEach(function (c) { draft.sites[c] = 1; });
+      (noti.tEmps || []).forEach(function (e) { draft.emps[e] = 1; });
+    }
+    var siteOpts = '<option value="">전체 근무지</option>' + noti.sites.map(function (s) {
+      return '<option value="' + esc(s.code) + '"' + (draft.site === s.code ? ' selected' : '') + '>' + esc(s.name) + '</option>';
+    }).join('');
+    return '<div class="card"><h2>⭐ 알림 받을 대상 (내 담당)</h2>' +
+      '<div class="seg"><button data-m="all" class="' + (draft.mode === 'all' ? 'on' : '') + '">전체 직원</button>' +
+      '<button data-m="pick" class="' + (draft.mode === 'pick' ? 'on' : '') + '">선택한 인원만</button></div>' +
+      '<div id="pickArea" class="' + (draft.mode === 'pick' ? '' : 'hidden') + '">' +
+      '<div class="muted" style="line-height:1.55">근무지를 고르면 그 근무지 <b>전원</b>, 직원을 고르면 <b>그 사람만</b> 알림이 와요. 둘 다 고르면 합쳐서 받아요.</div>' +
+      '<h3 class="sm">근무지</h3><div class="chips" id="tSiteChips">' + noti.sites.map(function (s) {
+        return '<button class="chip' + (draft.sites[s.code] ? ' on' : '') + '" data-c="' + esc(s.code) + '">' + esc(s.name) + '</button>';
+      }).join('') + '</div>' +
+      '<h3 class="sm">직원 <span class="muted" id="tEmpCnt"></span></h3>' +
+      '<div class="row2"><input class="tx" id="tQ" placeholder="이름·사번 검색" value="' + esc(draft.q) + '">' +
+      '<select class="tx" id="tSiteF">' + siteOpts + '</select></div>' +
+      '<div class="emplist" id="tEmpList"></div>' +
+      '<button class="sub" id="tClear">선택 모두 해제</button></div>' +
+      '<button class="main" id="tSave">대상 저장</button>' +
+      '<div class="tsum" id="tSum"></div></div>';
+  }
+
+  function siteNameOf(code) {
+    var s = noti.sites.filter(function (x) { return x.code === code; })[0];
+    return s ? s.name : code;
+  }
+
+  function renderEmpList() {
+    var q = draft.q.toLowerCase();
+    var list = noti.employees.filter(function (e) {
+      if (draft.site && e.site !== draft.site) return false;
+      return !q || String(e.name).toLowerCase().indexOf(q) >= 0 || String(e.empNo).toLowerCase().indexOf(q) >= 0;
+    });
+    $('tEmpList').innerHTML = list.map(function (e) {
+      var bySite = !!draft.sites[e.site];
+      var on = bySite || !!draft.emps[e.empNo];
+      return '<label class="emp' + (bySite ? ' bysite' : '') + '"><input type="checkbox" data-e="' + esc(e.empNo) + '"' +
+        (on ? ' checked' : '') + (bySite ? ' disabled' : '') + '><span><b>' + esc(e.name) + '</b> <span class="muted">' + esc(e.empNo) + '</span></span>' +
+        '<span class="s">' + esc(siteNameOf(e.site)) + (bySite ? '<br>근무지로 선택됨' : '') + '</span></label>';
+    }).join('') || '<div class="empty">직원이 없습니다</div>';
+    $('tEmpList').querySelectorAll('input[data-e]').forEach(function (inp) {
+      inp.addEventListener('change', function () {
+        var k = inp.getAttribute('data-e');
+        if (inp.checked) draft.emps[k] = 1; else delete draft.emps[k];
+        updateTargetSummary();
+      });
+    });
+    updateTargetSummary();
+  }
+
+  function targetCount() {
+    var set = {};
+    noti.employees.forEach(function (e) { if (draft.sites[e.site] || draft.emps[e.empNo]) set[e.empNo] = 1; });
+    return Object.keys(set).length;
+  }
+
+  function updateTargetSummary() {
+    var ns = Object.keys(draft.sites).length, ne = Object.keys(draft.emps).length;
+    if ($('tEmpCnt')) $('tEmpCnt').textContent = '· 개별 선택 ' + ne + '명';
+    var saved = noti.tAll ? '전체 직원' : ('근무지 ' + (noti.tSites || []).length + '곳 + 직원 ' + (noti.tEmps || []).length + '명');
+    var now = draft.mode === 'all' ? '전체 직원 ' + noti.employees.length + '명' :
+      ('근무지 ' + ns + '곳 + 직원 ' + ne + '명 → 총 ' + targetCount() + '명');
+    $('tSum').innerHTML = '선택: <b>' + now + '</b><br>저장된 설정: ' + saved +
+      '<br>저장하면 늦은 출근·모든 출근·요약 알림과 [오늘] 화면의 ⭐내 담당에 적용됩니다.';
+  }
+
+  function bindTarget() {
+    document.querySelectorAll('.seg button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        draft.mode = b.getAttribute('data-m');
+        document.querySelectorAll('.seg button').forEach(function (x) { x.classList.toggle('on', x === b); });
+        $('pickArea').classList.toggle('hidden', draft.mode !== 'pick');
+        updateTargetSummary();
+      });
+    });
+    $('tSiteChips').querySelectorAll('.chip').forEach(function (c) {
+      c.addEventListener('click', function () {
+        var k = c.getAttribute('data-c');
+        if (draft.sites[k]) delete draft.sites[k]; else draft.sites[k] = 1;
+        c.classList.toggle('on', !!draft.sites[k]);
+        renderEmpList();
+      });
+    });
+    $('tQ').addEventListener('input', function () { draft.q = this.value; renderEmpList(); });
+    $('tSiteF').addEventListener('change', function () { draft.site = this.value; renderEmpList(); });
+    $('tClear').addEventListener('click', function () { draft.sites = {}; draft.emps = {}; renderTargetChips(); renderEmpList(); });
+    $('tSave').addEventListener('click', async function () {
+      var tSites = draft.mode === 'all' ? [] : Object.keys(draft.sites);
+      var tEmps = draft.mode === 'all' ? [] : Object.keys(draft.emps);
+      if (draft.mode === 'pick' && !tSites.length && !tEmps.length) { toast('근무지나 직원을 하나 이상 고르세요'); return; }
+      this.disabled = true;
+      try {
+        var r = await call('notiSet', { tSites: tSites, tEmps: tEmps });
+        noti = Object.assign(noti, r);
+        if (data) data.target = { tAll: r.tAll, tSites: r.tSites, tEmps: r.tEmps };
+        draft = null;
+        toast(r.tAll ? '전체 직원 알림으로 저장했어요' : '내 담당 ' + (function () {
+          var set = {}; noti.employees.forEach(function (e) { if (r.tSites.indexOf(e.site) >= 0 || r.tEmps.indexOf(e.empNo) >= 0) set[e.empNo] = 1; });
+          return Object.keys(set).length;
+        })() + '명으로 저장했어요');
+        renderNoti();
+      } catch (e) { toast(e.message); this.disabled = false; }
+    });
+    renderEmpList();
+  }
+
+  function renderTargetChips() {
+    $('tSiteChips').querySelectorAll('.chip').forEach(function (c) { c.classList.toggle('on', !!draft.sites[c.getAttribute('data-c')]); });
+  }
+
+  /* ── 시작 ── */
+  function startApp() {
+    $('vLogin').classList.add('hidden'); $('vApp').classList.remove('hidden');
+    openTab('tToday');
+    loadToday();
+  }
+
+  setInterval(function () {
+    if (S && curTab === 'tToday' && document.visibilityState === 'visible' && $('dDate').value === kstToday()) loadToday();
+  }, 30000);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && S && curTab === 'tToday' && Date.now() - lastUpd > 15000) {
+      if ($('dDate').value < kstToday() && Date.now() - lastUpd > 3600000) $('dDate').value = kstToday();
+      loadToday();
+    }
+  });
+
+  try { S = JSON.parse(ATT.store.get(SKEY) || 'null'); } catch (e) { S = null; }
+  if (S && S.sess && S.exp > Date.now()) startApp(); else { S = null; showLogin(); }
+})();
+</script>
+</body>
+</html>
