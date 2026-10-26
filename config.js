@@ -2,14 +2,14 @@
 // 이 파일은 GitHub에 올리는 파일과, 인터넷이 막힌 근무지 PC에 복사하는 파일이 똑같아야 합니다.
 window.ATT_CONFIG = {
   // Apps Script 배포 후 받은 "웹 앱 URL" (https://script.google.com/macros/s/..../exec)
-  API_URL: "여기에_APPS_SCRIPT_웹앱_주소_붙여넣기",
+  API_URL: "https://script.google.com/macros/s/AKfycbyZFmGzXdEMZrVWjNUniJHtjHBMoNzlB3Z4kXrVTNQTOfUE_d5A72OdYbH7XSH3YpXL/exec",
 
   // GitHub Pages 주소 (끝에 / 포함). 인터넷이 막힌 PC에서 만드는 QR도 이 주소로 연결됩니다.
-  WEB_URL: "https://아이디.github.io/attend/",
+  WEB_URL: "https://severancekr.github.io/-attend/",
 
   // 개인정보 동의서에 표시되는 회사명과 문의처
-  COMPANY_NAME: "○○○(회사명)",
-  CONTACT: "인사 담당 관리자",
+  COMPANY_NAME: "에스텍(세브란스병원)",
+  CONTACT: "담당:02-2227-4915",
 
   // 인터넷이 막힌 PC에서 첫 설정할 때 보여줄 근무지 목록
   // (구글 시트 '근무지' 탭과 코드가 같아야 합니다. 근무지를 추가하면 여기에도 한 줄 추가하세요)
