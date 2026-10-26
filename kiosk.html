@@ -135,7 +135,7 @@
 <script>
 (function () {
   var KEY = 'att_kiosk';
-  var DEFAULT_CONF = { interval: 30, day: 480, night: 1080, nightOpen: 900, dayOpen: 1320, grace: 0 };
+  var DEFAULT_CONF = { interval: 30, day: 480, night: 1080, nightOpen: 960, dayOpen: 360, grace: 0 };
   var K = null;
   var conf = Object.assign({}, DEFAULT_CONF);
   var offset = 0, lastW = -1, qr = null, qrSize = 0, ip = '', ipAt = 0, busy = false, wakeLock = null;
@@ -150,11 +150,24 @@
   function hm(min) { return p2(Math.floor(min / 60)) + ':' + p2(min % 60); }
   function saveK() { ATT.store.set(KEY, JSON.stringify(K)); }
 
+  // 서버(Code.gs shiftInfo)와 같은 규칙: 가장 최근에 시작된 접수가 지금 근무,
+  // 근무일 = 그 접수 시작 이후 처음 오는 출근 기준 시각의 날짜
   function modeOf(t) {
     var d = kst(t), m = d.getUTCHours() * 60 + d.getUTCMinutes();
-    if (m >= conf.dayOpen) return { cls: 'day', txt: '☀ 내일 주간 출근 접수 중 (' + hm(conf.day) + ')' };
-    if (m >= conf.nightOpen) return { cls: 'night', txt: '🌙 야간 출근 접수 중 (' + hm(conf.night) + ')' };
-    return { cls: 'day', txt: '☀ 주간 출근 접수 중 (' + hm(conf.day) + ')' };
+    var dayAgo = (m - conf.dayOpen + 1440) % 1440;
+    var nightAgo = (m - conf.nightOpen + 1440) % 1440;
+    var isDay = dayAgo <= nightAgo;
+    var ago = isDay ? dayAgo : nightAgo;
+    var open = isDay ? conf.dayOpen : conf.nightOpen;
+    var startMin = isDay ? conf.day : conf.night;
+    var toStart = (startMin - open + 1440) % 1440;
+    var sd = kst(t + (toStart - ago) * 60000);
+    var dayDiff = Math.round((Date.UTC(sd.getUTCFullYear(), sd.getUTCMonth(), sd.getUTCDate()) -
+      Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())) / 86400000);
+    var when = dayDiff === 1 ? '내일 ' : (dayDiff === -1 ? '어제 ' : '');
+    return isDay
+      ? { cls: 'day', txt: '☀ ' + when + '주간 출근 접수 중 (' + hm(conf.day) + ')' }
+      : { cls: 'night', txt: '🌙 ' + when + '야간 출근 접수 중 (' + hm(conf.night) + ')' };
   }
 
   function showAlert(title, text, withBtn) {
