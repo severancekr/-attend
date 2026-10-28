@@ -140,13 +140,33 @@
       var u = new URL(location.href); u.searchParams.set('openExternalBrowser', '1'); location.replace(u.toString());
       return true;
     }
-    if (/NAVER\(inapp|Instagram|FBAN|FBAV|DaumApps|BAND\/|everytimeApp|SamsungBrowser\/.*CrossApp/i.test(ua)) {
+    // 네이버·구글 앱·인스타 등 '앱 안의 브라우저'는 저장 공간이 따로라서 다음 출근 때 등록을 못 찾음
+    if (/NAVER\(inapp|Instagram|FBAN|FBAV|DaumApps|BAND\/|everytimeApp|KAKAOSTORY|\bGSA\/|SamsungBrowser\/.*CrossApp/i.test(ua)) {
       info('↗', '기본 브라우저에서 열어주세요',
         '지금은 다른 앱 안에서 열린 화면이에요.<br>메뉴에서 <b>다른 브라우저로 열기</b>를 누르거나, <b>휴대폰 기본 카메라 앱</b>으로 QR을 찍어주세요.');
       return true;
     }
     return false;
   }
+
+  // 지금 브라우저 이름 (등록 완료 화면 안내용)
+  function browserName() {
+    var ua = navigator.userAgent || '';
+    if (/CriOS/i.test(ua)) return '크롬';
+    if (/FxiOS|Firefox/i.test(ua)) return '파이어폭스';
+    if (/EdgiOS|Edg\//i.test(ua)) return '엣지';
+    if (/Whale/i.test(ua)) return '웨일';
+    if (/SamsungBrowser/i.test(ua)) return '삼성 인터넷';
+    if (/iPhone|iPad|iPod/i.test(ua)) return '사파리';
+    if (/Chrome/i.test(ua)) return '크롬';
+    return '이 브라우저';
+  }
+  // 조사: 크롬으로/사파리로, 크롬이/사파리가
+  function batchim(w) { var c = String(w).charCodeAt(String(w).length - 1) - 0xAC00; return c >= 0 && c <= 11171 ? c % 28 : 0; }
+  function ro(w) { var b = batchim(w); return w + (b && b !== 8 ? '으로' : '로'); }
+  function iga(w) { return w + (batchim(w) ? '이' : '가'); }
+  function isIOS() { return /iPhone|iPad|iPod/i.test(navigator.userAgent || ''); }
+  function iosOtherBrowser() { return isIOS() && /CriOS|FxiOS|EdgiOS|Whale/i.test(navigator.userAgent || ''); }
 
   /* ── 등록 ── */
   async function startRegister(code, note) {
@@ -172,6 +192,10 @@
       notes.push('일반 등록은 <b>관리자 승인 후</b> 사용할 수 있어요.');
     }
     if (ATT.store.get(TOKEN_KEY)) notes.push('이 휴대폰은 이미 등록되어 있어요. 다시 등록하면 기존 등록이 바뀝니다.');
+    if (iosOtherBrowser()) {
+      notes.push('⚠ 지금 <b>' + browserName() + '</b>에서 열려 있어요. 아이폰 카메라로 QR을 찍으면 보통 <b>사파리</b>가 열립니다. ' +
+        '카메라로 찍었을 때 ' + iga(browserName()) + ' 열리는 휴대폰이면 그대로 등록하고, 아니면 <b>사파리</b>에서 등록해 주세요.');
+    }
     $('formNote').innerHTML = notes.join('<br>');
     $('formNote').classList.toggle('hidden', notes.length === 0);
     view('vForm');
@@ -197,10 +221,16 @@
       var res = await ATT.api('register', { code: regCode, name: name, empNo: empNo, token: token, consent: true, consentVersion: CONSENT_VERSION });
       if (!res.ok) throw new Error(res.error);
       ATT.store.set(TOKEN_KEY, token);
+      var where = '<div class="note" style="text-align:left;margin-top:12px">📱 <b>' + browserName() + '</b>에 등록되었어요.<br>' +
+        '앞으로도 <b>휴대폰 기본 카메라</b>로 QR을 찍어 ' + ro(browserName()) + ' 열리면 출근이 기록돼요.' +
+        (isIOS() ? '<br>※ 사파리 <b>개인정보 보호(비공개) 모드</b>, 방문 기록·웹사이트 데이터 삭제, 다른 앱(카카오톡·네이버·구글 앱)으로 열기를 하면 등록이 사라질 수 있어요.' : '') +
+        '</div>';
       if (res.status === '사용중') {
-        info('🎉', '등록 완료!', ATT.esc(res.name) + '님, 이제부터 근무지 화면의 QR을 <b>휴대폰 기본 카메라</b>로 찍으면 바로 출근이 기록됩니다.');
+        info('🎉', '등록 완료!', ATT.esc(res.name) + '님, 이제부터 근무지 화면의 QR을 <b>휴대폰 기본 카메라</b>로 찍으면 바로 출근이 기록됩니다.' + where);
+      } else if (res.status === '재등록대기') {
+        info('📝', '재등록 신청 완료', ATT.esc(res.name) + '님의 <b>새 휴대폰 등록 신청</b>이 접수되었어요.<br><b>관리자 승인 후</b> 이 휴대폰으로 출근할 수 있어요.' + where);
       } else {
-        info('📝', '등록 신청 완료', ATT.esc(res.name) + '님의 등록 신청이 접수되었어요.<br><b>관리자 승인 후</b> QR 출근을 사용할 수 있어요.');
+        info('📝', '등록 신청 완료', ATT.esc(res.name) + '님의 등록 신청이 접수되었어요.<br><b>관리자 승인 후</b> QR 출근을 사용할 수 있어요.' + where);
       }
     } catch (e) {
       $('fErr').textContent = e.message;
@@ -238,7 +268,7 @@
       ATT.store.del(TOKEN_KEY);
       startRegister(null, '등록 정보가 없어요(휴대폰 변경, 관리자 초기화 등). 다시 등록해주세요.');
     } else if (res.code === 'PENDING') {
-      info('⏳', '관리자 승인을 기다리는 중이에요', '승인되면 바로 QR 출근을 사용할 수 있어요. 급하면 ' + ATT.esc(contact) + '에게 말씀해주세요.');
+      info('⏳', '관리자 승인을 기다리는 중이에요', ATT.esc(res.error || '') + '<br>승인되면 바로 QR 출근을 사용할 수 있어요. 급하면 ' + ATT.esc(contact) + '에게 말씀해주세요.');
     } else {
       info('⚠️', '출근 처리에 실패했어요', ATT.esc(res.error || '알 수 없는 오류'));
     }
@@ -257,7 +287,9 @@
     if (reg) { startRegister(reg.trim().toUpperCase()); return; }
     if (s && w && c) {
       if (token) { doCheckin(token, s, w, c); return; }
-      startRegister(null, '처음 사용하는 휴대폰이에요. 먼저 등록해주세요.');
+      startRegister(null, '이 휴대폰(' + browserName() + ')에는 등록 정보가 없어요. 먼저 등록해주세요.<br>' +
+        '<span style="font-size:13px">예전에 등록했는데 이 화면이 보이면: 등록할 때와 <b>다른 앱·브라우저</b>로 열렸거나, <b>비공개 모드</b>이거나, ' +
+        '<b>방문 기록을 지운</b> 경우예요. 아래에서 다시 등록하면 관리자 승인 후 사용할 수 있어요.</span>');
       return;
     }
     if (token) {
