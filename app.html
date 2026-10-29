@@ -330,10 +330,15 @@
     if (res.ok) {
       var r = res.record;
       // 직원 화면에는 정상/늦음 구분을 표시하지 않음 (관리자 프로그램·구글 시트에만 기록)
-      var rows = row('이름', r.name) + row('근무일', r.date + ' (' + r.wd + ')') + row('근무 구분', r.shift) +
-        row('출근 시각', r.time) + row('근무지', r.siteName);
+      var isOut = r.shift === '퇴근';
+      var rows = row('이름', r.name) + row('근무일', r.date + ' (' + r.wd + ')') + row('구분', isOut ? '퇴근' : r.shift + ' 출근') +
+        row(isOut ? '퇴근 시각' : '출근 시각', r.time) + row('근무지', r.siteName);
       if (res.duplicate) {
-        info('ℹ️', '이미 출근 처리되었어요', '이번 근무의 출근은 처음 찍은 시각으로 기록되어 있어요.', rows);
+        info('ℹ️', isOut ? '이미 퇴근 처리되었어요' : '이미 출근 처리되었어요',
+          isOut ? '오늘 퇴근은 처음 찍은 시각으로 기록되어 있어요.' : '이번 근무의 출근은 처음 찍은 시각으로 기록되어 있어요.', rows);
+      } else if (isOut) {
+        info('🏠', '퇴근 완료!', '오늘도 수고 많으셨어요. 조심히 들어가세요!', rows);
+        try { if (navigator.vibrate) navigator.vibrate(120); } catch (e) { }
       } else {
         info('✅', '출근 완료!', '좋은 하루 보내세요!', rows);
         try { if (navigator.vibrate) navigator.vibrate(120); } catch (e) { }

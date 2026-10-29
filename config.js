@@ -9,7 +9,7 @@ window.ATT_CONFIG = {
 
   // 개인정보 동의서에 표시되는 회사명과 문의처
   COMPANY_NAME: "에스텍(세브란스)",
-  CONTACT: "담당:02-2227-4915",
+  CONTACT: "인사 담당 관리자",
 
   // 인터넷이 막힌 PC에서 첫 설정할 때 보여줄 근무지 목록
   // (구글 시트 '근무지' 탭과 코드가 같아야 합니다. 근무지를 추가하면 여기에도 한 줄 추가하세요)
@@ -23,6 +23,12 @@ window.ATT_CONFIG = {
     { code: "SC-EYE", name: "전문센터 - 안과" },
     { code: "SC-DENT", name: "전문센터 - 치과" },
     { code: "SC-HEART", name: "전문센터 - 심혈관" },
-    { code: "SC-KIDS", name: "전문센터 - 어린이" }
+    { code: "SC-KIDS", name: "전문센터 - 어린이" },
+    { code: "B3-C3", name: "암병원 보안실" },
+    { code: "B1-J", name: "중입자센터" },
+    { code: "mm-ccc", name: "본관 보안실" },
+    { code: "cm-mmmm", name: "본관 보안실(앞)" },
+    { code: "ER-Room", name: "응급센터" },
+    { code: "admin", name: "세브란스" }
   ]
 };

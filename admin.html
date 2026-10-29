@@ -131,6 +131,25 @@
   .emp .s { margin-left:auto; font-size:12px; color:var(--sub); text-align:right; }
   .emp.bysite { opacity:.6; }
   .tsum { font-size:13px; color:var(--sub); margin-top:10px; line-height:1.5; }
+  .badge.o { background:rgba(22,163,74,.14); color:var(--green); }
+  .st small { display:block; font-weight:600; font-size:11px; }
+  .emp2 { display:flex; align-items:center; gap:10px; padding:11px 2px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .emp2:last-child { border-bottom:0; }
+  .emp2 .who { flex:1; min-width:0; }
+  .emp2 .who div { font-size:12px; color:var(--sub); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pill { font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; white-space:nowrap; }
+  .pill.a { background:rgba(31,95,214,.12); color:var(--blue); }
+  .pill.p { background:rgba(217,119,6,.15); color:var(--orange); }
+  .pill.n { background:var(--chip); color:var(--sub); }
+  #sheet { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:30; display:flex; align-items:flex-end; justify-content:center; }
+  #sheet .in { background:var(--card); width:100%; max-width:560px; max-height:88vh; overflow:auto; border-radius:18px 18px 0 0;
+    padding:18px 16px calc(18px + env(safe-area-inset-bottom)); }
+  #sheet h3 { margin:0 0 4px; font-size:18px; }
+  #sheet .acts button { width:100%; margin-top:8px; padding:13px; font-size:15px; font-weight:700; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--text); text-align:left; }
+  #sheet .acts button.danger { color:var(--red); }
+  #sheet .acts button.prim { background:var(--blue); color:#fff; border-color:var(--blue); text-align:center; }
+  #regQr { display:flex; justify-content:center; margin:12px 0; }
+  #regQr img, #regQr canvas { background:#fff; padding:8px; border-radius:10px; }
   .toast { position:fixed; left:50%; bottom:calc(90px + env(safe-area-inset-bottom)); transform:translateX(-50%); background:rgba(28,35,51,.92); color:#fff;
     padding:10px 16px; border-radius:12px; font-size:14px; z-index:20; max-width:90vw; text-align:center; }
 </style>
@@ -179,15 +198,16 @@
         <button class="chip on" data-v="">전체</button>
         <button class="chip" data-v="주간">주간</button>
         <button class="chip" data-v="야간">야간</button>
+        <button class="chip" data-v="퇴근">퇴근</button>
         <button class="chip mine hidden" id="mineChip">⭐ 내 담당</button>
         <button class="chip filter hidden" id="siteChip"></button>
       </div>
       <div class="stats">
-        <div class="stat big"><div><div class="t">출근 인원</div><div class="n" id="sTotal">-</div></div>
+        <div class="stat big"><div><div class="t" id="sTotalT">출근 인원</div><div class="n" id="sTotal">-</div></div>
           <div class="muted" id="sSub"></div></div>
         <div class="stat"><div class="t">주간</div><div class="n" id="sDay">-</div></div>
         <div class="stat"><div class="t">야간</div><div class="n" id="sNight">-</div></div>
-        <div class="stat"><div class="t">늦은 출근</div><div class="n late" id="sLate">-</div></div>
+        <div class="stat"><div class="t">당일 출근</div><div class="n late" id="sLate">-</div></div>
       </div>
       <div class="card"><h2>근무지별 <span class="muted">· 누르면 그 근무지만 보기</span></h2><div id="siteList"></div></div>
       <div class="card"><h2 id="listTitle">출근자 명단</h2><div id="peopleList"></div></div>
@@ -207,6 +227,22 @@
       <div id="qResult"></div>
     </section>
 
+    <!-- 탭: 직원 -->
+    <section id="tEmp" class="hidden">
+      <div class="card">
+        <input class="tx" id="eQ" placeholder="이름·사번 검색" enterkeyhint="search">
+        <div class="chips" id="eChips" style="margin-top:10px;margin-bottom:0">
+          <button class="chip on" data-f="">전체</button>
+          <button class="chip" data-f="승인대기">승인대기</button>
+          <button class="chip" data-f="사용중">사용중</button>
+          <button class="chip" data-f="미등록">미등록</button>
+          <button class="chip" data-f="off">🏠 퇴근대상</button>
+        </div>
+        <div class="row2"><button class="sub" id="eAdd">＋ 직원 추가</button><button class="sub hidden" id="eApproveAll">승인대기 전체 승인</button></div>
+      </div>
+      <div class="card"><h2 id="eTitle">직원</h2><div id="eList"><div class="empty">불러오는 중...</div></div></div>
+    </section>
+
     <!-- 탭: 알림 -->
     <section id="tNoti" class="hidden">
       <div id="nBody"><div class="empty">불러오는 중...</div></div>
@@ -221,10 +257,12 @@
   <nav><div class="in">
     <button class="on" data-tab="tToday"><i>📊</i>오늘</button>
     <button data-tab="tSearch"><i>🔎</i>검색</button>
+    <button data-tab="tEmp"><i>👥</i>직원<span id="pendBadge" style="color:var(--orange)"></span></button>
     <button data-tab="tNoti"><i>🔔</i>알림</button>
   </div></nav>
 </div>
 
+<div id="sheet" class="hidden"><div class="in" id="sheetIn"></div></div>
 <div class="toast hidden" id="toast"></div>
 
 <script src="config.js"></script>
@@ -237,13 +275,15 @@
   var S = null;                 // { sess, id, name, exp }
   var data = null;              // 마지막 오늘 조회 결과
   var shiftF = '', siteF = null, mineF = false, curTab = 'tToday', refreshing = false, lastUpd = 0;
-  // 늦은 시간 표시: 45 → '45분', 60 → '1시간', 452 → '7시간 32분'
+  // 지연 시간 표시: 45 → '45분', 60 → '1시간', 452 → '7시간 32분'
   function fmtDelay(min) {
     min = Math.max(0, parseInt(min, 10) || 0);
     var h = Math.floor(min / 60), m = min % 60;
     if (!h) return m + '분';
     return m ? h + '시간 ' + m + '분' : h + '시간';
   }
+  function isLate(r) { return r.status === '당일 출근' || r.status === '늦은 출근'; }
+  function isOut(r) { return r.shift === '퇴근'; }
   function inTarget(t, r) {
     var ts = t && t.tSites || [];
     return !t || t.tAll || ts.indexOf(String(r.site)) >= 0 || (r.home && ts.indexOf(String(r.home)) >= 0) ||
@@ -309,8 +349,9 @@
   function openTab(tab) {
     curTab = tab;
     document.querySelectorAll('nav button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-tab') === tab); });
-    ['tToday', 'tSearch', 'tNoti'].forEach(function (t) { $(t).classList.toggle('hidden', t !== tab); });
-    $('hTitle').textContent = { tToday: '출근 현황', tSearch: '기록 검색', tNoti: '알림 설정' }[tab];
+    ['tToday', 'tSearch', 'tEmp', 'tNoti'].forEach(function (t) { $(t).classList.toggle('hidden', t !== tab); });
+    $('hTitle').textContent = { tToday: '출근 현황', tSearch: '기록 검색', tEmp: '직원 관리', tNoti: '알림 설정' }[tab];
+    if (tab === 'tEmp') loadEmps();
     $('hRef').classList.toggle('hidden', tab !== 'tToday');
     $('hUpd').classList.toggle('hidden', tab !== 'tToday');
     if (tab === 'tNoti') loadNoti();
@@ -367,20 +408,24 @@
     $('mineChip').classList.toggle('hidden', !hasTarget);
     $('mineChip').classList.toggle('on', mineF);
     var recs = data.records.filter(function (r) { return (!shiftF || r.shift === shiftF) && (!mineF || inTarget(data.target, r)); });
-    var late = recs.filter(function (r) { return r.status === '늦은 출근'; }).length;
-    var people = {}; recs.forEach(function (r) { people[r.empNo] = 1; });
+    var ins = recs.filter(function (r) { return !isOut(r); });
+    var outN = recs.length - ins.length;
+    var late = ins.filter(isLate).length;
+    var people = {}; (shiftF === '퇴근' ? recs : ins).forEach(function (r) { people[r.empNo] = 1; });
+    $('sTotalT').textContent = shiftF === '퇴근' ? '퇴근 인원' : '출근 인원';
     $('sTotal').innerHTML = Object.keys(people).length + '<small>명</small>';
-    $('sSub').innerHTML = '<span class="ok">정상 ' + (recs.length - late) + '</span> · <span class="late">늦은 출근 ' + late + '</span>';
-    $('sDay').innerHTML = recs.filter(function (r) { return r.shift === '주간'; }).length + '<small>명</small>';
-    $('sNight').innerHTML = recs.filter(function (r) { return r.shift === '야간'; }).length + '<small>명</small>';
+    $('sSub').innerHTML = '<span class="ok">출근 완료 ' + (ins.length - late) + '</span> · <span class="late">당일 출근 ' + late + '</span>' +
+      (outN ? '<br><span class="good">🏠 퇴근 ' + outN + '</span>' : '');
+    $('sDay').innerHTML = ins.filter(function (r) { return r.shift === '주간'; }).length + '<small>명</small>';
+    $('sNight').innerHTML = ins.filter(function (r) { return r.shift === '야간'; }).length + '<small>명</small>';
     $('sLate').innerHTML = late + '<small>명</small>';
 
     // 근무지별
     var by = {};
-    recs.forEach(function (r) {
+    ins.forEach(function (r) {
       var s = by[r.site] || (by[r.site] = { d: 0, n: 0, l: 0, name: r.siteName });
       if (r.shift === '주간') s.d++; else s.n++;
-      if (r.status === '늦은 출근') s.l++;
+      if (isLate(r)) s.l++;
     });
     var order = data.sites.map(function (s) { return { code: s.code, name: s.name }; });
     Object.keys(by).forEach(function (c) { if (!data.sites.some(function (s) { return s.code === c; })) order.push({ code: c, name: by[c].name }); });
@@ -389,7 +434,7 @@
       return '<div class="site' + (siteF === s.code ? ' sel' : '') + '" data-code="' + esc(s.code) + '">' +
         '<div class="nm' + (tot ? '' : ' zero') + '">' + esc(s.name) + '</div>' +
         '<div class="cnt">주 ' + v.d + ' · 야 ' + v.n + '</div>' +
-        '<div class="lt">' + (v.l ? '늦음 ' + v.l : '') + '</div>' +
+        '<div class="lt">' + (v.l ? '당일 ' + v.l : '') + '</div>' +
         '<div class="tot">' + tot + '</div></div>';
     }).join('') || '<div class="empty">근무지가 없습니다</div>';
     $('siteList').querySelectorAll('.site').forEach(function (el) {
@@ -404,18 +449,20 @@
     var siteName = siteF ? ((order.filter(function (s) { return s.code === siteF; })[0] || {}).name || siteF) : '';
     $('siteChip').classList.toggle('hidden', !siteF);
     $('siteChip').textContent = siteName + ' ✕';
-    $('listTitle').textContent = (mineF ? '⭐ ' : '') + (siteF ? siteName + ' 출근자 ' : (mineF ? '내 담당 출근자 ' : '출근자 명단 ')) + list.length + '명';
-    list = list.slice().sort(function (a, b) { return (b.shift === '야간') - (a.shift === '야간') || b.time.localeCompare(a.time); });
+    $('listTitle').textContent = (mineF ? '⭐ ' : '') + (siteF ? siteName + ' 기록 ' : (mineF ? '내 담당 기록 ' : '출퇴근 명단 ')) + list.length + '건';
+    list = list.slice().sort(function (a, b) { return b.time.localeCompare(a.time); });
     $('peopleList').innerHTML = list.map(personHtml).join('') || '<div class="empty">아직 출근 기록이 없습니다</div>';
   }
 
   function personHtml(r, withDate) {
-    var late = r.status === '늦은 출근';
+    var late = isLate(r), out = isOut(r);
+    var st = out ? '<div class="st good">퇴근</div>'
+      : late ? '<div class="st late">당일 출근<small>지연 ' + fmtDelay(r.delay) + '</small></div>'
+      : '<div class="st ok">출근 완료</div>';
     return '<div class="person">' +
       '<div class="tm">' + esc(String(r.time).substring(0, 5)) + '</div>' +
-      '<div class="who"><b>' + esc(r.name) + '</b> <span class="badge ' + (r.shift === '주간' ? 'd' : 'n') + '">' + esc(r.shift) + '</span>' +
-      '<div>' + (withDate ? esc(r.date) + ' (' + esc(r.wd) + ') · ' : '') + esc(r.siteName) + ' · ' + esc(r.empNo) + '</div></div>' +
-      '<div class="st ' + (late ? 'late' : 'ok') + '">' + (late ? '늦음 ' + fmtDelay(r.delay) : '정상') + '</div></div>';
+      '<div class="who"><b>' + esc(r.name) + '</b> <span class="badge ' + (out ? 'o' : r.shift === '주간' ? 'd' : 'n') + '">' + esc(r.shift) + '</span>' +
+      '<div>' + (withDate ? esc(r.date) + ' (' + esc(r.wd) + ') · ' : '') + esc(r.siteName) + ' · ' + esc(r.empNo) + '</div></div>' + st + '</div>';
   }
 
   /* ── 검색 ── */
@@ -437,16 +484,16 @@
       var okN = r.total - r.late;
       var h = '<div class="stats">' +
         '<div class="stat"><div class="t">전체</div><div class="n">' + r.total + '<small>회</small></div></div>' +
-        '<div class="stat"><div class="t">정상 출근</div><div class="n ok">' + okN + '<small>회</small></div></div>' +
-        '<div class="stat"><div class="t">늦은 출근</div><div class="n late">' + r.late + '<small>회</small></div></div></div>';
-      if (r.total) {
-        h += '<div class="card"><h2>요약</h2><div class="muted">정상 비율 ' + (okN / r.total * 100).toFixed(1) + '%' +
-          (r.late ? ' · 늦은 출근 평균 ' + fmtDelay(r.avgDelay) : '') + ' · 대상 ' + r.people + '명</div>' +
+        '<div class="stat"><div class="t">출근 완료</div><div class="n ok">' + okN + '<small>회</small></div></div>' +
+        '<div class="stat"><div class="t">당일 출근</div><div class="n late">' + r.late + '<small>회</small></div></div></div>';
+      if (r.total || r.outs) {
+        h += '<div class="card"><h2>요약</h2><div class="muted">' + (r.total ? '출근 완료 비율 ' + (okN / r.total * 100).toFixed(1) + '%' : '출근 기록 없음') +
+          (r.late ? ' · 평균 지연 ' + fmtDelay(r.avgDelay) : '') + (r.outs ? ' · 🏠 퇴근 ' + r.outs + '회' : '') + ' · 대상 ' + r.people + '명</div>' +
           '<div style="margin-top:8px">' + r.months.map(function (m) {
-            return '<div class="site"><div class="nm">' + esc(m.ym) + '</div><div class="cnt">정상 ' + (m.total - m.late) + '</div>' +
-              '<div class="lt">' + (m.late ? '늦음 ' + m.late : '') + '</div><div class="tot">' + m.total + '</div></div>';
+            return '<div class="site"><div class="nm">' + esc(m.ym) + '</div><div class="cnt">출근 완료 ' + (m.total - m.late) + '</div>' +
+              '<div class="lt">' + (m.late ? '당일 ' + m.late : '') + '</div><div class="tot">' + m.total + '</div></div>';
           }).join('') + '</div></div>';
-        h += '<div class="card"><h2>출근 기록' + (r.truncated ? ' <span class="muted">(최근 300건)</span>' : '') + '</h2>' +
+        h += '<div class="card"><h2>출퇴근 기록' + (r.truncated ? ' <span class="muted">(최근 300건)</span>' : '') + '</h2>' +
           r.records.map(function (x) { return personHtml(x, true); }).join('') + '</div>';
       } else {
         h += '<div class="empty">검색 결과가 없습니다</div>';
@@ -456,6 +503,152 @@
       $('qResult').innerHTML = '<div class="err">' + esc(e.message) + '</div>';
     } finally { $('qBtn').disabled = false; }
   });
+
+  /* ── 직원 관리 ── */
+  var emp = null, empF = '', empBusy = false;
+  async function loadEmps() {
+    if (empBusy) return;
+    empBusy = true;
+    try { emp = await call('empList'); renderEmps(); }
+    catch (e) { $('eList').innerHTML = '<div class="err">' + esc(e.message) + '</div>'; }
+    finally { empBusy = false; }
+  }
+  function siteNm(code) {
+    var s = (emp && emp.sites || []).filter(function (x) { return x.code === code; })[0];
+    return s ? s.name : (code || '근무지 없음');
+  }
+  function pillOf(e) {
+    if (e.status === '승인대기') return '<span class="pill p">' + (e.reRequest ? '재등록 대기' : '승인대기') + '</span>';
+    if (e.status === '사용중') return '<span class="pill a">사용중</span>';
+    return '<span class="pill n">' + esc(e.status || '미등록') + '</span>';
+  }
+  function renderEmps() {
+    if (!emp) return;
+    var q = $('eQ').value.trim().toLowerCase();
+    var all = emp.employees;
+    var pend = all.filter(function (e) { return e.status === '승인대기'; });
+    $('pendBadge').textContent = pend.length ? ' ' + pend.length : '';
+    $('eApproveAll').classList.toggle('hidden', !pend.length);
+    $('eApproveAll').textContent = '승인대기 전체 승인 (' + pend.length + ')';
+    var list = all.filter(function (e) {
+      if (q && String(e.name).toLowerCase().indexOf(q) < 0 && String(e.empNo).toLowerCase().indexOf(q) < 0) return false;
+      if (empF === 'off') return e.offDuty;
+      return !empF || e.status === empF;
+    }).sort(function (a, b) { return (b.status === '승인대기') - (a.status === '승인대기') || String(a.name).localeCompare(String(b.name), 'ko'); });
+    $('eTitle').textContent = '직원 ' + list.length + '명' + (list.length !== all.length ? ' / 전체 ' + all.length + '명' : '');
+    var shown = list.slice(0, 200);
+    $('eList').innerHTML = shown.map(function (e) {
+      return '<div class="emp2" data-e="' + esc(e.empNo) + '"><div class="who"><b>' + esc(e.name) + '</b>' + (e.offDuty ? ' <span class="badge o">🏠퇴근</span>' : '') +
+        '<div>' + esc(e.empNo) + ' · ' + esc(siteNm(e.site)) + (e.reRequest ? ' · 📱재등록 요청' : '') + '</div></div>' + pillOf(e) + '</div>';
+    }).join('') + (list.length > 200 ? '<div class="empty">200명까지 표시 - 검색해서 찾으세요</div>' : '') ||
+      '<div class="empty">직원이 없습니다</div>';
+    $('eList').querySelectorAll('.emp2').forEach(function (el) {
+      el.addEventListener('click', function () { openEmp(el.getAttribute('data-e')); });
+    });
+  }
+  $('eQ').addEventListener('input', renderEmps);
+  document.querySelectorAll('#eChips .chip').forEach(function (c) {
+    c.addEventListener('click', function () {
+      empF = c.getAttribute('data-f');
+      document.querySelectorAll('#eChips .chip').forEach(function (x) { x.classList.toggle('on', x === c); });
+      renderEmps();
+    });
+  });
+  $('eApproveAll').addEventListener('click', async function () {
+    var pend = emp.employees.filter(function (e) { return e.status === '승인대기'; });
+    if (!confirm('승인대기 ' + pend.length + '명을 모두 승인할까요?\n(본인이 맞는지 확인한 뒤 승인하세요)')) return;
+    await act('approve', { empNos: pend.map(function (e) { return e.empNo; }) }, function (r) { return r.count + '명 승인했어요'; });
+  });
+  $('eAdd').addEventListener('click', function () { editEmp(null); });
+
+  // 공통: 서버 작업 → 토스트 → 목록 새로고침
+  async function act(action, payload, msg, keepSheet) {
+    try {
+      var r = await call(action, payload);
+      toast(typeof msg === 'function' ? msg(r) : msg);
+      if (!keepSheet) closeSheet();
+      await loadEmps();
+      return r;
+    } catch (e) { toast(e.message); return null; }
+  }
+  function openSheet(html) { $('sheetIn').innerHTML = html; $('sheet').classList.remove('hidden'); }
+  function closeSheet() { $('sheet').classList.add('hidden'); $('sheetIn').innerHTML = ''; }
+  $('sheet').addEventListener('click', function (e) { if (e.target === $('sheet')) closeSheet(); });
+
+  function findEmp(no) { return emp.employees.filter(function (e) { return e.empNo === no; })[0]; }
+
+  function openEmp(no) {
+    var e = findEmp(no);
+    if (!e) return;
+    var b = function (id, text, cls) { return '<button id="' + id + '"' + (cls ? ' class="' + cls + '"' : '') + '>' + text + '</button>'; };
+    openSheet('<h3>' + esc(e.name) + ' ' + pillOf(e) + '</h3><div class="muted">' + esc(e.empNo) + ' · ' + esc(siteNm(e.site)) +
+      (e.regAt ? ' · 등록 ' + esc(String(e.regAt).substring(0, 10)) : '') + '</div>' +
+      (e.note ? '<div class="note">' + esc(e.note) + '</div>' : '') +
+      '<div class="acts">' +
+      (e.status === '승인대기' ? b('aOk', e.reRequest ? '✅ 재등록 승인 (새 휴대폰으로 교체)' : '✅ 승인', 'prim') : '') +
+      b('aLink', '🔗 개별 등록 링크 (승인 없이 바로 사용)') +
+      b('aReset', '🔄 기기 초기화 (등록 지우기)') +
+      b('aEdit', '✏️ 정보 수정 (이름·사번·근무지·비고)') +
+      b('aOff', e.offDuty ? '🏠 퇴근대상 해제' : '🏠 퇴근대상 지정 (야간 QR = 퇴근)') +
+      b('aDel', '🗑 직원 삭제', 'danger') + b('aClose', '닫기') + '</div>');
+    if ($('aOk')) $('aOk').onclick = function () { act('approve', { empNos: [e.empNo] }, e.name + '님 승인했어요'); };
+    $('aLink').onclick = function () { showLink(e); };
+    $('aReset').onclick = function () {
+      if (confirm(e.name + '님의 등록 기기를 초기화할까요?\n지금 휴대폰으로는 출근이 안 되고 다시 등록해야 합니다.')) act('resetDevice', { empNo: e.empNo }, '초기화했어요');
+    };
+    $('aEdit').onclick = function () { editEmp(e); };
+    $('aOff').onclick = function () { act('offSet', { empNos: [e.empNo], on: !e.offDuty }, e.offDuty ? '퇴근대상에서 뺐어요' : '퇴근대상으로 지정했어요'); };
+    $('aDel').onclick = function () {
+      if (confirm(e.name + '(' + e.empNo + ')님을 직원명단에서 삭제할까요?\n출근 기록은 남아 있습니다.') && confirm('정말 삭제할까요?')) act('empDelete', { empNos: [e.empNo] }, '삭제했어요');
+    };
+    $('aClose').onclick = closeSheet;
+  }
+
+  function loadQRLib() {
+    return new Promise(function (res, rej) {
+      if (window.QRCode) return res();
+      var sc = document.createElement('script'); sc.src = 'qrcode.min.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc);
+    });
+  }
+  async function showLink(e) {
+    var r;
+    try { r = await call('makeRegCode', { empNo: e.empNo }); } catch (er) { toast(er.message); return; }
+    var msg = '[출근 기기 등록 안내]\n' + e.name + '님, 아래 링크를 눌러 출근용 휴대폰을 등록해주세요.\n' + r.link +
+      '\n※ ' + String(r.exp).substring(0, 10) + '까지, 1회만 사용 가능 (아이폰은 사파리 일반 탭에서 여세요)';
+    openSheet('<h3>' + esc(e.name) + '님 등록 링크</h3><div class="muted">' + esc(String(r.exp).substring(0, 16)) + '까지 · 한 번 쓰면 폐기</div>' +
+      (r.warn ? '<div class="err">' + esc(r.warn) + '</div>' : '') +
+      '<div id="regQr"></div><div class="muted" style="text-align:center">직원이 옆에 있으면 이 QR을 직원 휴대폰 <b>카메라 앱</b>으로 찍게 하세요</div>' +
+      '<input class="tx" id="regLink" readonly value="' + esc(r.link) + '" style="margin-top:10px;font-size:13px">' +
+      '<div class="acts">' + (navigator.share ? '<button id="lShare" class="prim">카카오톡 등으로 보내기</button>' : '') +
+      '<button id="lCopy">안내 문구와 함께 복사</button><button id="lClose">닫기</button></div>');
+    try { await loadQRLib(); new QRCode($('regQr'), { text: r.link, width: 200, height: 200 }); } catch (er) { }
+    if ($('lShare')) $('lShare').onclick = function () { navigator.share({ text: msg }).catch(function () { }); };
+    $('lCopy').onclick = async function () {
+      try { await navigator.clipboard.writeText(msg); toast('복사했어요'); }
+      catch (er) { $('regLink').select(); document.execCommand('copy'); toast('링크를 복사했어요'); }
+    };
+    $('lClose').onclick = closeSheet;
+    loadEmps();
+  }
+
+  function editEmp(e) {
+    var opts = '<option value="">근무지 선택</option>' + (emp.sites || []).map(function (s) {
+      return '<option value="' + esc(s.code) + '"' + (e && e.site === s.code ? ' selected' : '') + '>' + esc(s.name) + '</option>';
+    }).join('');
+    openSheet('<h3>' + (e ? '직원 정보 수정' : '직원 추가') + '</h3>' +
+      '<label class="f">사번</label><input class="tx" id="fNo" value="' + esc(e ? e.empNo : '') + '">' +
+      '<label class="f">이름</label><input class="tx" id="fNm" value="' + esc(e ? e.name : '') + '">' +
+      '<label class="f">근무지</label><select class="tx" id="fSite">' + opts + '</select>' +
+      '<label class="f">비고</label><input class="tx" id="fNote" value="' + esc(e && !e.reRequest ? e.note || '' : '') + '">' +
+      '<div class="acts"><button id="fSave" class="prim">저장</button><button id="fCancel">취소</button></div>');
+    $('fCancel').onclick = function () { if (e) openEmp(e.empNo); else closeSheet(); };
+    $('fSave').onclick = function () {
+      var no = $('fNo').value.trim(), nm = $('fNm').value.trim(), site = $('fSite').value, note = $('fNote').value.trim();
+      if (!no || !nm) { toast('사번과 이름을 입력하세요'); return; }
+      if (e) act('empUpdate', { empNo: e.empNo, newEmpNo: no, name: nm, site: site, note: note }, '저장했어요');
+      else act('addEmployee', { empNo: no, name: nm, site: site, note: note }, nm + '님을 추가했어요');
+    };
+  }
 
   /* ── 알림 ── */
   var noti = null;
@@ -484,9 +677,10 @@
         '<button class="sub" id="tgChk">연결 확인</button></div>';
     } else {
       h = '<div class="card"><h2>받을 알림 <span class="good" style="font-size:13px">● 텔레그램 연결됨</span></h2>' +
-        swHtml('late', '⏰ 늦은 출근 알림', '누군가 늦게 출근 체크하면 바로 알림') +
-        swHtml('every', '✅ 모든 출근 알림', '모든 출근마다 알림. 출근 시간대에 수십~백여 개가 올 수 있어요') +
-        swHtml('summary', '📊 출근 현황 요약', '주간·야간 출근 기준 시각 ' + noti.summaryMin + '분 뒤, 근무지별 인원과 늦은 출근자를 한 번에') +
+        swHtml('late', '⏰ 당일 출근 알림', '기준 시각이 지나서 출근 체크하면 지연 시간과 함께 바로 알림') +
+        swHtml('pending', '🙋 승인 대기 알림', '직원이 휴대폰을 새로 등록하거나 재등록을 요청하면 바로 알림') +
+        swHtml('every', '✅ 모든 출근·퇴근 알림', '모든 출근·퇴근마다 알림. 출근 시간대에 수십~백여 개가 올 수 있어요') +
+        swHtml('summary', '📊 출근 현황 요약', '주간·야간 출근 기준 시각 ' + noti.summaryMin + '분 뒤, 근무지별 인원과 당일 출근자를 한 번에') +
         '</div><div class="card"><button class="sub" id="tgTest" style="margin-top:0">테스트 알림 보내기</button>' +
         '<button class="sub" id="tgOff">텔레그램 연결 해제</button>' +
         '<div class="muted" style="margin-top:10px;line-height:1.5">알림 설정은 관리자마다 따로 저장됩니다. 휴대폰 무음·방해금지 시간은 텔레그램 앱의 알림 설정에서 조절하세요.</div></div>';
@@ -596,7 +790,7 @@
     var now = draft.mode === 'all' ? '전체 직원 ' + noti.employees.length + '명' :
       ('근무지 ' + ns + '곳 + 직원 ' + ne + '명 → 총 ' + targetCount() + '명');
     $('tSum').innerHTML = '선택: <b>' + now + '</b><br>저장된 설정: ' + saved +
-      '<br>저장하면 늦은 출근·모든 출근·요약 알림과 [오늘] 화면의 ⭐내 담당에 적용됩니다.';
+      '<br>저장하면 당일 출근·승인 대기·모든 출근·요약 알림과 [오늘] 화면의 ⭐내 담당에 적용됩니다.';
   }
 
   function bindTarget() {

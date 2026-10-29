@@ -50,6 +50,9 @@
   .dot.bad { background:var(--red); }
   #gear { background:none; border:0; color:var(--sub); font-size:22px; cursor:pointer; opacity:.4; }
   #gear:hover { opacity:1; }
+  #menu { position:fixed; inset:0; background:rgba(10,12,20,.75); display:flex; align-items:center; justify-content:center; padding:16px; z-index:5; }
+  #menu .card { max-width:420px; }
+  #menu .card button { margin-top:12px; }
   #alert { position:fixed; inset:0; background:rgba(10,12,20,.94); display:flex; align-items:center; justify-content:center; text-align:center; padding:24px; }
   #alert .box { max-width:680px; }
   #alert h2 { font-size:30px; color:var(--red); margin:0 0 12px; }
@@ -80,7 +83,7 @@
 
 <div id="setup" class="hidden">
   <div class="card">
-    <h1>근무지 QR 화면 설정</h1>
+    <h1 id="sTitle">근무지 QR 화면 설정</h1>
     <p>이 PC에 출근 QR을 띄우기 위한 첫 설정입니다. 한 번만 하면 다음부터는 이 화면을 열기만 하면 됩니다.</p>
     <div class="netBox wait" id="sNet">인터넷 연결 확인 중...</div>
 
@@ -105,6 +108,7 @@
     </div>
 
     <button id="sBtn">설정 완료</button>
+    <button id="sCancel" class="sub hidden">취소 (지금 설정 그대로 두기)</button>
     <button id="sRetry" class="sub">인터넷 연결 다시 확인</button>
     <div class="err" id="sErr"></div>
   </div>
@@ -129,11 +133,19 @@
     </div>
     <div class="status">
       <div class="stLine"><span class="dot" id="dot"></span><span id="stText">연결 확인 중</span>
-        <button id="gear" title="이 PC 설정 초기화">⚙</button></div>
+        <button id="gear" title="근무지 바꾸기 / 설정">⚙</button></div>
       <div id="keyInfo"></div>
     </div>
   </div>
 </div>
+
+<div id="menu" class="hidden"><div class="card">
+  <h1 style="font-size:20px">이 PC 설정</h1>
+  <p id="menuInfo"></p>
+  <button id="mEdit">근무지 · PC 이름 바꾸기</button>
+  <button id="mReset" class="sub">이 PC 설정 전체 지우기 (QR 비밀키 필요)</button>
+  <button id="mClose" class="sub">닫기</button>
+</div></div>
 
 <div id="alert" class="hidden"><div class="box">
   <h2 id="alertTitle"></h2><p id="alertText"></p>
@@ -178,7 +190,7 @@
     var when = dayDiff === 1 ? '내일 ' : (dayDiff === -1 ? '어제 ' : '');
     return isDay
       ? { cls: 'day', txt: '☀ ' + when + '주간 출근 접수 중 (' + hm(conf.day) + ')' }
-      : { cls: 'night', txt: '🌙 ' + when + '야간 출근 접수 중 (' + hm(conf.night) + ')' };
+      : { cls: 'night', txt: '🌙 ' + when + '야간 출근 · 퇴근 접수 중 (' + hm(conf.night) + ')' };
   }
 
   function showAlert(title, text, withBtn) {
@@ -196,6 +208,16 @@
     if (allowManual) html += '<option value="__manual__">목록에 없음 - 직접 입력</option>';
     $('sSite').innerHTML = html;
     $('sManual').classList.add('hidden');
+    if (editMode && K && K.site) {       // 바꾸기 화면: 지금 근무지를 미리 선택
+      if (list.some(function (s) { return s.code === K.site; })) {
+        $('sSite').value = K.site;
+      } else if (allowManual) {
+        $('sSite').value = '__manual__';
+        $('sManual').classList.remove('hidden');
+        $('sCode').value = K.site;
+        $('sName').value = K.siteName || '';
+      }
+    }
   }
 
   async function checkNet() {
@@ -225,11 +247,22 @@
     $('sOffline').classList.remove('hidden');
   }
 
-  function showSetup() {
+  var editMode = false;
+  async function showSetup(edit) {
+    editMode = !!(edit && K);
     $('main').classList.add('hidden');
     $('alert').classList.add('hidden');
+    $('menu').classList.add('hidden');
     $('setup').classList.remove('hidden');
     $('sErr').textContent = '';
+    $('sTitle').textContent = editMode ? '근무지 · PC 이름 바꾸기' : '근무지 QR 화면 설정';
+    $('sBtn').textContent = editMode ? '바꾸기 저장' : '설정 완료';
+    $('sCancel').classList.toggle('hidden', !editMode);
+    if (editMode) {
+      $('sPc').value = K.pcName || '';
+      $('sKey').value = K.secret || '';
+      $('sCheck').textContent = K.secret ? await ATT.keyCheck(K.secret) : '------';
+    }
     if (!BASE) {
       $('sErr').innerHTML = 'config.js의 <b>WEB_URL</b>(GitHub Pages 주소)을 먼저 넣어주세요. 이 주소가 있어야 직원 휴대폰이 QR을 찍었을 때 출근 페이지가 열립니다.';
     }
@@ -246,16 +279,17 @@
   });
 
   $('sRetry').addEventListener('click', checkNet);
+  $('sCancel').addEventListener('click', function () { editMode = false; startMain(); });
 
   $('sBtn').addEventListener('click', async function () {
     $('sErr').textContent = '';
     if (!BASE) { $('sErr').textContent = 'config.js의 WEB_URL(GitHub Pages 주소)을 먼저 넣어주세요.'; return; }
     var site = $('sSite').value, siteName = '';
     if (site === '__manual__') {
-      site = $('sCode').value.trim().toUpperCase();
+      site = $('sCode').value.trim();       // 대소문자 그대로 (예: mm-ccc)
       siteName = $('sName').value.trim();
-      if (!/^[A-Z0-9-]{1,20}$/.test(site) || !siteName) {
-        $('sErr').textContent = '근무지 코드(영문 대문자·숫자·-)와 이름을 입력하세요. 코드는 구글 시트 근무지 탭과 똑같아야 합니다.';
+      if (!/^[A-Za-z0-9_-]{1,20}$/.test(site) || !siteName) {
+        $('sErr').textContent = '근무지 코드(영문·숫자·-)와 이름을 입력하세요. 코드는 구글 시트 근무지 탭과 대소문자까지 똑같아야 합니다.';
         return;
       }
     } else {
@@ -277,12 +311,14 @@
         var iv = parseInt($('sIv').value, 10);
         if (!(iv >= 10 && iv <= 300)) throw new Error('QR 바뀌는 간격은 10~300초 사이로 입력하세요.');
         var check = await ATT.keyCheck(secret);
-        if (!confirm('오프라인 설정은 비밀키를 서버에서 확인할 수 없습니다.\n\n키 확인코드: ' + check +
+        if (!(editMode && K && secret === K.secret) && !confirm('오프라인 설정은 비밀키를 서버에서 확인할 수 없습니다.\n\n키 확인코드: ' + check +
           '\nQR 간격: ' + iv + '초\n\n관리자 프로그램 [설정] 탭의 확인코드·QR 간격과 같은지 확인하셨나요?')) return;
         conf = Object.assign({}, DEFAULT_CONF, { interval: iv });
         K = { site: site, siteName: siteName || site, pcName: pcName, secret: secret, kioskId: kioskId, conf: conf, setupMode: 'offline' };
       }
       saveK();
+      editMode = false;
+      lastW = -1;
       startMain();
     } catch (e) {
       $('sErr').textContent = e.message;
@@ -423,7 +459,13 @@
     location.reload();
   }
   $('gear').addEventListener('click', function () {
-    var v = prompt('이 PC의 QR 설정을 초기화하려면 QR 비밀키를 입력하세요.');
+    $('menuInfo').innerHTML = '지금 근무지: <b>' + ATT.esc(K.siteName || K.site) + '</b> (' + ATT.esc(K.site) + ')<br>PC 이름: <b>' + ATT.esc(K.pcName) + '</b>';
+    $('menu').classList.remove('hidden');
+  });
+  $('mClose').addEventListener('click', function () { $('menu').classList.add('hidden'); });
+  $('mEdit').addEventListener('click', function () { showSetup(true); });
+  $('mReset').addEventListener('click', function () {
+    var v = prompt('이 PC의 QR 설정을 모두 지우려면 QR 비밀키를 입력하세요.');
     if (v === null) return;
     if (v.trim() === K.secret) resetPc(); else alert('QR 비밀키가 일치하지 않습니다.');
   });
