@@ -42,6 +42,11 @@
   .err { background:rgba(217,48,37,.1); color:var(--red); border-radius:10px; padding:11px 12px; font-size:14px; margin-top:14px; line-height:1.5; }
   .spin { width:44px; height:44px; margin:20px auto; border:4px solid var(--line); border-top-color:var(--blue); border-radius:50%; animation:sp 0.9s linear infinite; }
   @keyframes sp { to { transform:rotate(360deg); } }
+  .loadTitle { font-size:20px; font-weight:800; text-align:center; margin:4px 0 6px; }
+  .dots::after { content:''; animation:dots 1.4s steps(4) infinite; }
+  @keyframes dots { 0% { content:''; } 25% { content:'.'; } 50% { content:'..'; } 75% { content:'...'; } }
+  button.sub { width:100%; margin-top:10px; padding:14px; font-size:16px; font-weight:700; border:1px solid var(--line); border-radius:14px; background:var(--card); color:var(--text); }
+  button.main .bspin { display:inline-block; width:16px; height:16px; margin-right:8px; vertical-align:-2px; border:3px solid rgba(255,255,255,.4); border-top-color:#fff; border-radius:50%; animation:sp 0.9s linear infinite; }
 </style>
 </head>
 <body>
@@ -51,7 +56,12 @@
   <!-- 로딩 -->
   <div class="card" id="vLoading">
     <div class="spin"></div>
-    <div class="desc" id="loadingText">확인 중...</div>
+    <div class="loadTitle"><span id="loadingText">확인 중</span><span class="dots"></span></div>
+    <div class="desc" id="loadingSub">잠시만 기다려 주세요.</div>
+    <div class="hidden" id="loadingMore">
+      <div class="note" id="loadingMoreText" style="text-align:left"></div>
+      <div id="loadingBtns"></div>
+    </div>
   </div>
 
   <!-- 결과/안내 -->
@@ -83,7 +93,7 @@
     <button class="main" id="fBtn" disabled>등록하기</button>
     <div class="err hidden" id="fErr"></div>
   </div>
-  <div style="text-align:center;margin-top:18px"><a href="?diag=1" id="diagLink" style="color:var(--sub);font-size:13px">🔧 출근이 안 되면 눌러서 확인</a></div>
+  <div style="text-align:center;margin-top:18px" id="diagWrap"><a href="?diag=1" id="diagLink" style="color:var(--sub);font-size:13px">🔧 출근이 안 되면 눌러서 확인</a></div>
 </div>
 
 <script src="config.js"></script>
@@ -112,11 +122,47 @@
     '<h3>6. 정보주체의 권리</h3><p>귀하는 언제든지 본인 정보의 열람, 정정, 삭제, 처리 정지 및 동의 철회를 ' + ATT.esc(contact) + '에게 요청할 수 있습니다.</p>' +
     '<p style="color:var(--sub);margin-top:10px">동의서 버전 ' + CONSENT_VERSION + '</p>';
 
+  var LONG_WAIT_SEC = 40;     // 이 시간 넘게 기다리면 그때 [재등록] 등 버튼을 보여줌
+  var loadTimer = null;
+  var flowId = 0;             // 기다리는 중에 다른 화면으로 넘어가면, 늦게 온 응답은 무시
   function view(id) {
     ['vLoading', 'vInfo', 'vForm'].forEach(function (v) { $(v).classList.toggle('hidden', v !== id); });
+    $('diagWrap').classList.toggle('hidden', id === 'vLoading');   // 기다리는 동안엔 다른 링크를 숨김 (잘못 누름 방지)
+    if (id !== 'vLoading' && loadTimer) { clearInterval(loadTimer); loadTimer = null; }
     window.scrollTo(0, 0);
   }
-  function loading(t) { $('loadingText').textContent = t || '확인 중...'; view('vLoading'); }
+  // opt.reReg: 40초 넘게 걸리면 [재등록] 버튼 표시 (출근 확인 중일 때만)
+  function loading(t, opt) {
+    opt = opt || {};
+    $('loadingText').textContent = String(t || '확인 중').replace(/\.+$/, '');
+    $('loadingSub').innerHTML = '잠시만 기다려 주세요.<br><b>화면을 닫거나 다른 버튼을 누르지 마세요.</b>';
+    $('loadingMore').classList.add('hidden');
+    $('loadingBtns').innerHTML = '';
+    view('vLoading');
+    var t0 = Date.now();
+    if (loadTimer) clearInterval(loadTimer);
+    loadTimer = setInterval(function () {
+      if ($('vLoading').classList.contains('hidden')) { clearInterval(loadTimer); loadTimer = null; return; }
+      var sec = Math.floor((Date.now() - t0) / 1000);
+      if (sec >= 5 && sec < LONG_WAIT_SEC) {
+        $('loadingSub').innerHTML = '서버 응답을 기다리는 중이에요 (' + sec + '초)<br>처음 접속할 때는 <b>20초 정도</b> 걸릴 수 있어요. 그대로 기다려 주세요.';
+      }
+      if (sec >= LONG_WAIT_SEC && $('loadingMore').classList.contains('hidden')) {
+        $('loadingSub').innerHTML = '응답이 늦어지고 있어요 (' + sec + '초 넘음)';
+        $('loadingMoreText').innerHTML = '📶 와이파이·데이터 연결을 확인한 뒤, <b>근무지 화면의 새 QR</b>을 다시 찍어주세요.' +
+          (opt.reReg ? '<br><span style="font-size:13px;color:var(--sub)">※ 휴대폰을 바꿨거나 등록이 지워진 경우에만 아래 [재등록]을 누르세요.</span>' : '');
+        var html = '<button class="main" id="ldRetry">다시 시도</button>';
+        if (opt.reReg) html += '<button class="sub" id="ldReReg">📱 휴대폰을 바꿨어요 → 재등록</button>';
+        $('loadingBtns').innerHTML = html;
+        $('loadingMore').classList.remove('hidden');
+        $('ldRetry').addEventListener('click', function () {
+          flowId++;
+          if (opt.retry) opt.retry(); else location.reload();
+        });
+        if (opt.reReg) $('ldReReg').addEventListener('click', function () { flowId++; opt.reReg(); });
+      }
+    }, 1000);
+  }
   function info(icon, title, text, rowsHtml) {
     $('infoIcon').textContent = icon;
     $('infoTitle').textContent = title;
@@ -284,6 +330,63 @@
   ['fName', 'fEmp'].forEach(function (id) { $(id).addEventListener('input', updateBtn); });
   $('fAgree').addEventListener('change', updateBtn);
 
+  function setBtnBusy(busy) {
+    $('fBtn').disabled = busy;
+    $('fBtn').innerHTML = busy ? '<span class="bspin"></span>등록 중...' : '등록하기';
+  }
+
+  // 이미 등록된 사번·이름을 입력했을 때: 진짜 재등록인지 확인 (취소하면 아무것도 바뀌지 않음)
+  function askReRegister(res, name, empNo, token) {
+    info('📱', '이미 등록된 직원이에요',
+      '<b>' + ATT.esc(res.name || name) + '</b>님(사번 ' + ATT.esc(empNo) + ')은 <b>이미 출근 등록이 되어 있어요.</b><br><br>' +
+      '<div class="note" style="text-align:left;line-height:1.7">' +
+      '✅ <b>휴대폰을 바꿨거나</b>, 앱·방문 기록 삭제 등으로 <b>등록이 지워진 경우</b>에만 [재등록 신청]을 누르세요.<br>' +
+      '🔄 재등록은 <b>관리자 승인 후</b> 이 휴대폰으로 출근할 수 있어요. 승인 전까지는 예전 휴대폰으로 출근이 됩니다.<br>' +
+      '❌ 잘못 들어온 경우(출근하려다 기다리는 중에 누른 경우 등)는 <b>[취소]</b>를 누르고, 근무지 화면의 QR을 <b>"카메라" 앱</b>으로 다시 찍어주세요.</div>' +
+      '<button class="main" id="rrOk">재등록 신청</button>' +
+      '<button class="sub" id="rrCancel">취소</button>' +
+      '<div class="err hidden" id="rrErr"></div>');
+    $('rrCancel').addEventListener('click', function () {
+      info('👌', '취소했어요', '등록은 그대로예요. 아무것도 바뀌지 않았어요.<br>출근은 근무지 화면의 QR을 <b>"카메라" 앱</b>으로 찍어주세요.');
+    });
+    $('rrOk').addEventListener('click', async function () {
+      var b = $('rrOk');
+      b.disabled = true; $('rrCancel').disabled = true;
+      b.innerHTML = '<span class="bspin"></span>신청 중...';
+      try {
+        var r2 = await ATT.api('register', { code: null, name: name, empNo: empNo, token: token, consent: true,
+          consentVersion: CONSENT_VERSION, reRegister: true, oldToken: ATT.store.get(TOKEN_KEY) || '' }, 45000);
+        if (!r2.ok) throw new Error(r2.error);
+        registered(r2, token);
+      } catch (e) {
+        $('rrErr').textContent = e.message;
+        $('rrErr').classList.remove('hidden');
+        b.disabled = false; $('rrCancel').disabled = false;
+        b.textContent = '재등록 신청';
+      }
+    });
+  }
+
+  // 등록 결과 화면
+  function registered(res, token) {
+    if (res.same) {     // 이 휴대폰이 이미 등록된 그 기기 → 열쇠를 바꾸지 않음
+      info('✅', '이 휴대폰은 이미 등록되어 있어요', ATT.esc(res.name) + '님, 다시 등록할 필요 없어요.<br>출근은 근무지 화면의 QR을 <b>"카메라" 앱</b>으로 찍어주세요.');
+      return;
+    }
+    ATT.store.set(TOKEN_KEY, token);
+    var where = '<div class="note" style="text-align:left;margin-top:12px">📱 <b>' + browserName() + '</b>에 등록되었어요.<br>' +
+      '앞으로도 <b>휴대폰 기본 카메라</b>로 QR을 찍어 ' + ro(browserName()) + ' 열리면 출근이 기록돼요.' +
+      (isIOS() ? '<br>※ QR은 꼭 <b>"카메라" 앱</b>으로 찍어주세요 (제어 센터 "코드 스캐너"·카카오톡·네이버·구글 앱 X).<br>※ 사파리 <b>비공개 모드</b>, 방문 기록·웹사이트 데이터 삭제를 하면 등록이 사라져요.' : '') +
+      '</div>';
+    if (res.status === '사용중') {
+      info('🎉', '등록 완료!', ATT.esc(res.name) + '님, 이제부터 근무지 화면의 QR을 <b>휴대폰 기본 카메라</b>로 찍으면 바로 출근이 기록됩니다.' + where);
+    } else if (res.status === '재등록대기') {
+      info('📝', '재등록 신청 완료', ATT.esc(res.name) + '님의 <b>새 휴대폰 등록 신청</b>이 접수되었어요.<br><b>관리자 승인 후</b> 이 휴대폰으로 출근할 수 있어요.' + where);
+    } else {
+      info('📝', '등록 신청 완료', ATT.esc(res.name) + '님의 등록 신청이 접수되었어요.<br><b>관리자 승인 후</b> QR 출근을 사용할 수 있어요.' + where);
+    }
+  }
+
   $('fBtn').addEventListener('click', async function () {
     var name = $('fName').value.trim(), empNo = $('fEmp').value.trim();
     $('fErr').classList.add('hidden');
@@ -293,40 +396,41 @@
       return;
     }
     if (!privateOverride && await detectPrivate()) { showPrivateBlock(function () { view('vForm'); }); return; }
-    $('fBtn').disabled = true;
+    setBtnBusy(true);
     var token = ATT.randomHex(32);
     try {
-      var res = await ATT.api('register', { code: regCode, name: name, empNo: empNo, token: token, consent: true, consentVersion: CONSENT_VERSION });
+      var res = await ATT.api('register', { code: regCode, name: name, empNo: empNo, token: token, consent: true,
+        consentVersion: CONSENT_VERSION, oldToken: ATT.store.get(TOKEN_KEY) || '' }, 45000);
+      setBtnBusy(false);
+      if (!res.ok && res.code === 'ALREADY_REGISTERED') { askReRegister(res, name, empNo, token); return; }
       if (!res.ok) throw new Error(res.error);
-      ATT.store.set(TOKEN_KEY, token);
-      var where = '<div class="note" style="text-align:left;margin-top:12px">📱 <b>' + browserName() + '</b>에 등록되었어요.<br>' +
-        '앞으로도 <b>휴대폰 기본 카메라</b>로 QR을 찍어 ' + ro(browserName()) + ' 열리면 출근이 기록돼요.' +
-        (isIOS() ? '<br>※ QR은 꼭 <b>"카메라" 앱</b>으로 찍어주세요 (제어 센터 "코드 스캐너"·카카오톡·네이버·구글 앱 X).<br>※ 사파리 <b>비공개 모드</b>, 방문 기록·웹사이트 데이터 삭제를 하면 등록이 사라져요.' : '') +
-        '</div>';
-      if (res.status === '사용중') {
-        info('🎉', '등록 완료!', ATT.esc(res.name) + '님, 이제부터 근무지 화면의 QR을 <b>휴대폰 기본 카메라</b>로 찍으면 바로 출근이 기록됩니다.' + where);
-      } else if (res.status === '재등록대기') {
-        info('📝', '재등록 신청 완료', ATT.esc(res.name) + '님의 <b>새 휴대폰 등록 신청</b>이 접수되었어요.<br><b>관리자 승인 후</b> 이 휴대폰으로 출근할 수 있어요.' + where);
-      } else {
-        info('📝', '등록 신청 완료', ATT.esc(res.name) + '님의 등록 신청이 접수되었어요.<br><b>관리자 승인 후</b> QR 출근을 사용할 수 있어요.' + where);
-      }
+      registered(res, token);
     } catch (e) {
       $('fErr').textContent = e.message;
       $('fErr').classList.remove('hidden');
-      $('fBtn').disabled = false;
+      setBtnBusy(false);
     }
   });
 
   /* ── 출근 ── */
   async function doCheckin(token, s, w, c) {
-    loading('출근 확인 중...');
+    var my = ++flowId;
+    loading('출근 등록 중', {
+      retry: function () { doCheckin(token, s, w, c); },
+      reReg: function () {
+        startRegister(null, '<b>휴대폰을 바꿨거나 등록이 지워진 경우에만</b> 아래에 이름·사번을 입력하세요.<br>' +
+          '이미 등록된 사번이면 [재등록 신청] / [취소]를 한 번 더 물어봐요. 재등록은 관리자 승인 후 사용할 수 있어요.');
+      }
+    });
     var res;
     try {
-      res = await ATT.api('checkin', { token: token, s: s, w: w, c: c });
+      res = await ATT.api('checkin', { token: token, s: s, w: w, c: c }, 60000);
     } catch (e) {
+      if (my !== flowId) return;
       info('📶', '인터넷 연결을 확인해주세요', '연결이 불안정해요. 와이파이나 데이터를 확인한 뒤 화면의 새 QR을 다시 찍어주세요.');
       return;
     }
+    if (my !== flowId) return;      // 기다리다 [재등록] 등 다른 화면으로 넘어갔으면 늦은 응답은 무시
     if (res.ok) {
       var r = res.record;
       // 직원 화면에는 정상/늦음 구분을 표시하지 않음 (관리자 프로그램·구글 시트에만 기록)
@@ -373,7 +477,8 @@
       if (token) { doCheckin(token, s, w, c); return; }
       startRegister(null, '이 휴대폰(' + browserName() + ')에는 등록 정보가 없어요. 먼저 등록해주세요.<br>' +
         '<span style="font-size:13px">예전에 등록했는데 이 화면이 보이면: 등록할 때와 <b>다른 앱·브라우저</b>로 열렸거나, <b>비공개 모드</b>이거나, ' +
-        '<b>방문 기록을 지운</b> 경우예요. QR은 <b>"카메라" 앱</b>으로 찍어주세요. 아래에서 다시 등록하면 관리자 승인 후 사용할 수 있어요.</span>');
+        '<b>방문 기록을 지운</b> 경우예요. QR은 <b>"카메라" 앱</b>으로 찍어주세요. 아래에서 다시 등록하면 관리자 승인 후 사용할 수 있어요.<br>' +
+        '이미 등록된 사번·이름을 입력하면 <b>[재등록 신청] / [취소]</b>를 한 번 더 물어봐요.</span>');
       return;
     }
     if (token) {
