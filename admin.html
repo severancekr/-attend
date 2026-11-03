@@ -133,6 +133,12 @@
   .tsum { font-size:13px; color:var(--sub); margin-top:10px; line-height:1.5; }
   .badge.o { background:rgba(22,163,74,.14); color:var(--green); }
   .st small { display:block; font-weight:600; font-size:11px; }
+  /* v2.1 근무조 */
+  .badge.g { background:var(--chip); color:var(--text); }
+  .miss b, .miss .tm, .st.miss { color:var(--green); }
+  .rsum { font-size:13px; color:var(--sub); margin:-4px 0 8px; line-height:1.5; }
+  .rsum b { color:var(--text); } .rsum b.good { color:var(--green); }
+  details.more summary { font-size:13px; color:var(--sub); cursor:pointer; padding:8px 0 2px; }
   .emp2 { display:flex; align-items:center; gap:10px; padding:11px 2px; border-bottom:1px solid var(--line); cursor:pointer; }
   .emp2:last-child { border-bottom:0; }
   .emp2 .who { flex:1; min-width:0; }
@@ -209,6 +215,8 @@
         <div class="stat"><div class="t">야간</div><div class="n" id="sNight">-</div></div>
         <div class="stat"><div class="t">당일 출근</div><div class="n late" id="sLate">-</div></div>
       </div>
+      <div class="card hidden" id="rosterCard"><h2>🟢 근무조 출근 체크 <span class="muted" id="rosterHol"></span></h2>
+        <div class="rsum" id="rosterSum"></div><div id="rosterList"></div></div>
       <div class="card"><h2>근무지별 <span class="muted">· 누르면 그 근무지만 보기</span></h2><div id="siteList"></div></div>
       <div class="card"><h2 id="listTitle">출근자 명단</h2><div id="peopleList"></div></div>
     </section>
@@ -452,6 +460,42 @@
     $('listTitle').textContent = (mineF ? '⭐ ' : '') + (siteF ? siteName + ' 기록 ' : (mineF ? '내 담당 기록 ' : '출퇴근 명단 ')) + list.length + '건';
     list = list.slice().sort(function (a, b) { return b.time.localeCompare(a.time); });
     $('peopleList').innerHTML = list.map(personHtml).join('') || '<div class="empty">아직 출근 기록이 없습니다</div>';
+    renderRoster();
+  }
+
+  // v2.1 근무조 기준: 그날 주간/야간 근무인데 QR 미체크인 직원 (연차·휴가일 수 있어 초록색으로만 표시)
+  function renderRoster() {
+    var ro = (data.roster || []).filter(function (x) {
+      if (shiftF === '주간' || shiftF === '야간') { if (x.sched !== shiftF) return false; }
+      if (mineF && !inTarget(data.target, { site: x.site, home: x.site, empNo: x.empNo })) return false;
+      if (siteF && x.site !== siteF) return false;
+      return true;
+    });
+    var has = (data.groups || []).length > 0 && shiftF !== '퇴근';
+    $('rosterCard').classList.toggle('hidden', !has);
+    if (!has) return;
+    var work = ro.filter(function (x) { return x.status !== '휴무일 출근'; });
+    var miss = ro.filter(function (x) { return x.status === '미출근'; });
+    var leave = ro.filter(function (x) { return x.status === '휴가'; });
+    var before = ro.filter(function (x) { return x.status === '출근 전'; });
+    var offw = ro.filter(function (x) { return x.status === '휴무일 출근'; });
+    var inN = work.length - miss.length - leave.length - before.length;
+    $('rosterHol').textContent = data.holiday ? '· 🎌 ' + data.holiday : '';
+    $('rosterSum').innerHTML = '근무 <b>' + work.length + '</b> · 출근 <b>' + inN + '</b> · <span class="good">QR 미체크 <b class="good">' + miss.length + '</b></span>' +
+      ' · 휴가 ' + leave.length + (before.length ? ' · 출근 전 ' + before.length : '') + (offw.length ? ' · 휴무일 출근 ' + offw.length : '') +
+      (miss.length ? '<br>초록색 = 근무날인데 QR을 안 찍은 직원 (연차·휴가일 수 있어요)' : '');
+    var row = function (x, cls, st) {
+      return '<div class="person ' + cls + '"><div class="tm">' + esc(x.start || '-') + '</div>' +
+        '<div class="who"><b>' + esc(x.name) + '</b> <span class="badge g">' + esc(x.group) + '조</span> <span class="badge ' + (x.sched === '야간' ? 'n' : 'd') + '">' + esc(x.sched) + '</span>' +
+        '<div>' + esc(x.area ? x.area + ' · ' : '') + esc(x.siteName) + ' · ' + esc(x.empNo) + '</div></div>' + st + '</div>';
+    };
+    var html = miss.map(function (x) { return row(x, 'miss', '<div class="st miss">QR 미체크</div>'); }).join('');
+    if (!miss.length) html = '<div class="empty" style="padding:12px 0">QR 미체크 직원이 없어요' + (before.length ? ' (출근 전 ' + before.length + '명)' : '') + '</div>';
+    var rest = leave.map(function (x) { return row(x, '', '<div class="st muted">휴가<small>' + esc(x.leave) + '</small></div>'); })
+      .concat(before.map(function (x) { return row(x, '', '<div class="st muted">출근 전</div>'); }))
+      .concat(offw.map(function (x) { return row(x, '', '<div class="st warn">휴무일 출근<small>' + esc(x.time) + '</small></div>'); }));
+    if (rest.length) html += '<details class="more"><summary>휴가 · 출근 전 · 휴무일 출근 ' + rest.length + '명 보기</summary>' + rest.join('') + '</details>';
+    $('rosterList').innerHTML = html;
   }
 
   function personHtml(r, withDate) {
@@ -538,7 +582,7 @@
     $('eTitle').textContent = '직원 ' + list.length + '명' + (list.length !== all.length ? ' / 전체 ' + all.length + '명' : '');
     var shown = list.slice(0, 200);
     $('eList').innerHTML = shown.map(function (e) {
-      return '<div class="emp2" data-e="' + esc(e.empNo) + '"><div class="who"><b>' + esc(e.name) + '</b>' + (e.offDuty ? ' <span class="badge o">🏠퇴근</span>' : '') +
+      return '<div class="emp2" data-e="' + esc(e.empNo) + '"><div class="who"><b>' + esc(e.name) + '</b>' + (e.group ? ' <span class="badge g">' + esc(e.group) + '조</span>' : '') + (e.offDuty ? ' <span class="badge o">🏠퇴근</span>' : '') +
         '<div>' + esc(e.empNo) + ' · ' + esc(siteNm(e.site)) + (e.reRequest ? ' · 📱재등록 요청' : '') + '</div></div>' + pillOf(e) + '</div>';
     }).join('') + (list.length > 200 ? '<div class="empty">200명까지 표시 - 검색해서 찾으세요</div>' : '') ||
       '<div class="empty">직원이 없습니다</div>';
@@ -582,13 +626,14 @@
     if (!e) return;
     var b = function (id, text, cls) { return '<button id="' + id + '"' + (cls ? ' class="' + cls + '"' : '') + '>' + text + '</button>'; };
     openSheet('<h3>' + esc(e.name) + ' ' + pillOf(e) + '</h3><div class="muted">' + esc(e.empNo) + ' · ' + esc(siteNm(e.site)) +
-      (e.regAt ? ' · 등록 ' + esc(String(e.regAt).substring(0, 10)) : '') + '</div>' +
+      (e.regAt ? ' · 등록 ' + esc(String(e.regAt).substring(0, 10)) : '') +
+      (e.group ? ' · ' + esc(e.group) + '조' : '') + (e.startTime ? ' · 지정 출근 ' + esc(e.startTime) : '') + '</div>' +
       (e.note ? '<div class="note">' + esc(e.note) + '</div>' : '') +
       '<div class="acts">' +
       (e.status === '승인대기' ? b('aOk', e.reRequest ? '✅ 재등록 승인 (새 휴대폰으로 교체)' : '✅ 승인', 'prim') : '') +
       b('aLink', '🔗 개별 등록 링크 (승인 없이 바로 사용)') +
       b('aReset', '🔄 기기 초기화 (등록 지우기)') +
-      b('aEdit', '✏️ 정보 수정 (이름·사번·근무지·비고)') +
+      b('aEdit', '✏️ 정보 수정 (이름·사번·근무지·근무조·지정 출근)') +
       b('aOff', e.offDuty ? '🏠 퇴근대상 해제' : '🏠 퇴근대상 지정 (야간 QR = 퇴근)') +
       b('aDel', '🗑 직원 삭제', 'danger') + b('aClose', '닫기') + '</div>');
     if ($('aOk')) $('aOk').onclick = function () { act('approve', { empNos: [e.empNo] }, e.name + '님 승인했어요'); };
@@ -635,18 +680,34 @@
     var opts = '<option value="">근무지 선택</option>' + (emp.sites || []).map(function (s) {
       return '<option value="' + esc(s.code) + '"' + (e && e.site === s.code ? ' selected' : '') + '>' + esc(s.name) + '</option>';
     }).join('');
+    var gopts = '<option value="">근무조 없음</option>' + (emp.groups || []).map(function (g) {
+      return '<option value="' + esc(g.code) + '"' + (e && e.group === g.code ? ' selected' : '') + '>' + esc(g.code) + '조 · ' + esc(g.pattern) + '</option>';
+    }).join('');
+    var st = {};
+    String(e && e.startTime || '').replace(/(주간|야간)?\s*(\d{1,2}:\d{2})/g, function (_, k, t) { st[k || '주간'] = t; return _; });
+    var note0 = e ? String(e.note || '') : '';
+    if (e && e.reRequest) note0 = note0.indexOf(' · ') >= 0 ? note0.substring(note0.indexOf(' · ') + 3) : '';
     openSheet('<h3>' + (e ? '직원 정보 수정' : '직원 추가') + '</h3>' +
       '<label class="f">사번</label><input class="tx" id="fNo" value="' + esc(e ? e.empNo : '') + '">' +
       '<label class="f">이름</label><input class="tx" id="fNm" value="' + esc(e ? e.name : '') + '">' +
       '<label class="f">근무지</label><select class="tx" id="fSite">' + opts + '</select>' +
-      '<label class="f">비고</label><input class="tx" id="fNote" value="' + esc(e && !e.reRequest ? e.note || '' : '') + '">' +
+      '<label class="f">근무조</label><select class="tx" id="fGrp">' + gopts + '</select>' +
+      '<label class="f">지정 출근 (이 직원만 기준 시각이 다를 때, 비우면 근무조·설정 시각)</label>' +
+      '<div class="row2"><input class="tx" id="fSd" placeholder="주간 예) 09:00" value="' + esc(st['주간'] || '') + '">' +
+      '<input class="tx" id="fSn" placeholder="야간 예) 19:00" value="' + esc(st['야간'] || '') + '"></div>' +
+      '<label class="f">비고</label><input class="tx" id="fNote" value="' + esc(note0) + '">' +
       '<div class="acts"><button id="fSave" class="prim">저장</button><button id="fCancel">취소</button></div>');
     $('fCancel').onclick = function () { if (e) openEmp(e.empNo); else closeSheet(); };
     $('fSave').onclick = function () {
       var no = $('fNo').value.trim(), nm = $('fNm').value.trim(), site = $('fSite').value, note = $('fNote').value.trim();
       if (!no || !nm) { toast('사번과 이름을 입력하세요'); return; }
-      if (e) act('empUpdate', { empNo: e.empNo, newEmpNo: no, name: nm, site: site, note: note }, '저장했어요');
-      else act('addEmployee', { empNo: no, name: nm, site: site, note: note }, nm + '님을 추가했어요');
+      var sd = $('fSd').value.trim(), sn = $('fSn').value.trim(), bad = false;
+      [sd, sn].forEach(function (v) { if (v && !/^\d{1,2}:\d{2}$/.test(v)) bad = true; });
+      if (bad) { toast('지정 출근은 09:00 처럼 입력하세요'); return; }
+      var stt = [sd ? '주간 ' + sd : '', sn ? '야간 ' + sn : ''].filter(function (x) { return x; }).join(', ');
+      var grp = $('fGrp').value;
+      if (e) act('empUpdate', { empNo: e.empNo, newEmpNo: no, name: nm, site: site, note: note, group: grp, startTime: stt }, '저장했어요');
+      else act('addEmployee', { empNo: no, name: nm, site: site, note: note, group: grp, startTime: stt }, nm + '님을 추가했어요');
     };
   }
 
