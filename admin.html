@@ -2,6 +2,9 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
+<link rel="preconnect" href="https://script.google.com" crossorigin>
+<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+<link rel="dns-prefetch" href="https://script.googleusercontent.com">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#1f5fd6">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -345,7 +348,7 @@
   $('lPw').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('lBtn').click(); });
 
   function logout(expired) {
-    ATT.store.del(SKEY); S = null; data = null;
+    ATT.store.del(SKEY); S = null; data = null; emp = null; memClear();
     showLogin(expired ? '로그인이 만료되었습니다. 다시 로그인하세요.' : '');
   }
   $('logoutBtn').addEventListener('click', function () { if (confirm('로그아웃할까요?')) logout(false); });
@@ -383,12 +386,29 @@
   $('siteChip').addEventListener('click', function () { siteF = null; renderToday(); });
   $('mineChip').addEventListener('click', function () { mineF = !mineF; renderToday(); });
 
+  // v2.3: 마지막으로 받은 화면을 이 휴대폰에 저장해 두었다가 열자마자 먼저 보여줌 (새 자료는 뒤이어 받음)
+  function memSet(k, v) { try { localStorage.setItem('att_m_' + k, JSON.stringify({ t: Date.now(), v: v })); } catch (e) { } }
+  function memGet(k, maxAge) {
+    try { var o = JSON.parse(localStorage.getItem('att_m_' + k) || 'null'); if (o && Date.now() - o.t < maxAge) return o; } catch (e) { }
+    return null;
+  }
+  function memClear() {
+    try { Object.keys(localStorage).forEach(function (k) { if (k.indexOf('att_m_') === 0) localStorage.removeItem(k); }); } catch (e) { }
+  }
+
   async function loadToday() {
     if (refreshing || !S) return;
+    var dd = $('dDate').value || kstToday();
+    var mk = 'today_' + S.id + '_' + dd;
+    if (!data || data.date !== dd) {
+      var m = memGet(mk, 12 * 3600000);
+      if (m) { data = m.v; lastUpd = m.t; renderToday(); }
+    }
     refreshing = true; $('hRef').classList.add('spin');
     try {
-      data = await call('mToday', { date: $('dDate').value || kstToday() });
+      data = await call('mToday', { date: dd });
       lastUpd = Date.now();
+      memSet(mk, data);
       renderToday();
     } catch (e) {
       toast(e.message);
@@ -489,9 +509,14 @@
         '<div class="who"><b>' + esc(x.name) + '</b> <span class="badge g">' + esc(x.group) + '조</span> <span class="badge ' + (x.sched === '야간' ? 'n' : 'd') + '">' + esc(x.sched) + '</span>' +
         '<div>' + esc(x.area ? x.area + ' · ' : '') + esc(x.siteName) + ' · ' + esc(x.empNo) + '</div></div>' + st + '</div>';
     };
-    var html = miss.map(function (x) { return row(x, 'miss', '<div class="st miss">QR 미체크</div>'); }).join('');
+    var html = miss.map(function (x) {
+      return row(x, 'miss', '<div class="st miss">QR 미체크' + (x.leave ? '<small>휴가 ' + esc(x.leaveApproval || '') + '</small>' : '') + '</div>');
+    }).join('');
     if (!miss.length) html = '<div class="empty" style="padding:12px 0">QR 미체크 직원이 없어요' + (before.length ? ' (출근 전 ' + before.length + '명)' : '') + '</div>';
-    var rest = leave.map(function (x) { return row(x, '', '<div class="st muted">휴가<small>' + esc(x.leave) + '</small></div>'); })
+    var rest = leave.map(function (x) {
+      var a = x.leaveApproval && x.leaveApproval !== '승인' ? ' · ' + x.leaveApproval : '';
+      return row(x, '', '<div class="st ' + (a ? 'warn' : 'muted') + '">휴가<small>' + esc(x.leave + a) + '</small></div>');
+    })
       .concat(before.map(function (x) { return row(x, '', '<div class="st muted">출근 전</div>'); }))
       .concat(offw.map(function (x) { return row(x, '', '<div class="st warn">휴무일 출근<small>' + esc(x.time) + '</small></div>'); }));
     if (rest.length) html += '<details class="more"><summary>휴가 · 출근 전 · 휴무일 출근 ' + rest.length + '명 보기</summary>' + rest.join('') + '</details>';
@@ -553,7 +578,8 @@
   async function loadEmps() {
     if (empBusy) return;
     empBusy = true;
-    try { emp = await call('empList'); renderEmps(); }
+    if (!emp) { var m = memGet('emp_' + S.id, 24 * 3600000); if (m) { emp = m.v; renderEmps(); } }
+    try { emp = await call('empList'); memSet('emp_' + S.id, emp); renderEmps(); }
     catch (e) { $('eList').innerHTML = '<div class="err">' + esc(e.message) + '</div>'; }
     finally { empBusy = false; }
   }
