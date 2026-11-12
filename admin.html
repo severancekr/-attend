@@ -157,6 +157,15 @@
   #sheet .acts button { width:100%; margin-top:8px; padding:13px; font-size:15px; font-weight:700; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--text); text-align:left; }
   #sheet .acts button.danger { color:var(--red); }
   #sheet .acts button.prim { background:var(--blue); color:#fff; border-color:var(--blue); text-align:center; }
+  /* v2.4 관리자 버튼 출근 (화면 오른쪽 아래) */
+  #selfBtn { position:fixed; right:14px; bottom:calc(72px + env(safe-area-inset-bottom)); z-index:20; border:0; border-radius:28px;
+    padding:12px 16px 12px 14px; background:var(--green); color:#fff; font-size:15px; font-weight:800; box-shadow:0 6px 18px rgba(0,0,0,.25); }
+  #selfBtn i { font-style:normal; margin-right:4px; }
+  #selfBtn.done { background:var(--card); color:var(--green); border:2px solid var(--green); }
+  .selfBig { text-align:center; padding:8px 0 4px; }
+  .selfBig .clk { font-size:42px; font-weight:800; letter-spacing:1px; font-variant-numeric:tabular-nums; }
+  .selfBig .who { font-size:15px; color:var(--sub); margin-top:4px; }
+  .badge.m { background:rgba(22,163,74,.14); color:var(--green); }
   #regQr { display:flex; justify-content:center; margin:12px 0; }
   #regQr img, #regQr canvas { background:#fff; padding:8px; border-radius:10px; }
   .toast { position:fixed; left:50%; bottom:calc(90px + env(safe-area-inset-bottom)); transform:translateX(-50%); background:rgba(28,35,51,.92); color:#fff;
@@ -274,6 +283,7 @@
 </div>
 
 <div id="sheet" class="hidden"><div class="in" id="sheetIn"></div></div>
+<button id="selfBtn" class="hidden" aria-label="내 출근 체크"><i>🕘</i><span id="selfBtnT">출근 체크</span></button>
 <div class="toast hidden" id="toast"></div>
 
 <script src="config.js"></script>
@@ -348,7 +358,7 @@
   $('lPw').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('lBtn').click(); });
 
   function logout(expired) {
-    ATT.store.del(SKEY); S = null; data = null; emp = null; memClear();
+    ATT.store.del(SKEY); S = null; data = null; emp = null; memClear(); selfInfo = null; $('selfBtn').classList.add('hidden');
     showLogin(expired ? '로그인이 만료되었습니다. 다시 로그인하세요.' : '');
   }
   $('logoutBtn').addEventListener('click', function () { if (confirm('로그아웃할까요?')) logout(false); });
@@ -402,7 +412,7 @@
     var mk = 'today_' + S.id + '_' + dd;
     if (!data || data.date !== dd) {
       var m = memGet(mk, 12 * 3600000);
-      if (m) { data = m.v; lastUpd = m.t; renderToday(); }
+      if (m) { data = m.v; lastUpd = m.t; renderToday(); renderSelfBtn(); }
     }
     refreshing = true; $('hRef').classList.add('spin');
     try {
@@ -410,6 +420,7 @@
       lastUpd = Date.now();
       memSet(mk, data);
       renderToday();
+      renderSelfBtn();
     } catch (e) {
       toast(e.message);
     } finally {
@@ -531,6 +542,7 @@
     return '<div class="person">' +
       '<div class="tm">' + esc(String(r.time).substring(0, 5)) + '</div>' +
       '<div class="who"><b>' + esc(r.name) + '</b> <span class="badge ' + (out ? 'o' : r.shift === '주간' ? 'd' : 'n') + '">' + esc(r.shift) + '</span>' +
+      (r.method && r.method.indexOf('버튼') === 0 ? ' <span class="badge m">버튼</span>' : r.method && r.method.indexOf('수동') === 0 ? ' <span class="badge g">수동</span>' : '') +
       '<div>' + (withDate ? esc(r.date) + ' (' + esc(r.wd) + ') · ' : '') + esc(r.siteName) + ' · ' + esc(r.empNo) + '</div></div>' + st + '</div>';
   }
 
@@ -923,6 +935,54 @@
   function renderTargetChips() {
     $('tSiteChips').querySelectorAll('.chip').forEach(function (c) { c.classList.toggle('on', !!draft.sites[c.getAttribute('data-c')]); });
   }
+
+  /* ── v2.4 관리자 버튼 출근: 최고관리자가 허용한 관리자만 보임, 누른 시각으로 기록 ── */
+  var selfInfo = null, clkTimer = null;
+  function renderSelfBtn() {
+    if (data && data.self) selfInfo = data.self;
+    var on = !!(S && selfInfo && selfInfo.allowed);
+    $('selfBtn').classList.toggle('hidden', !on);
+    if (!on) return;
+    // 오늘(지금 근무일) 이미 찍었는지
+    var mine = (data && data.date === data.nowWorkDate ? data.records || [] : []).filter(function (r) { return r.empNo === selfInfo.empNo && r.shift === data.nowShift; })[0];
+    $('selfBtn').classList.toggle('done', !!mine);
+    $('selfBtnT').textContent = mine ? '출근 ' + String(mine.time).substring(0, 5) : '출근 체크';
+  }
+  function nowKstText() {
+    var d = new Date(Date.now() + 9 * 3600000);
+    var p = function (n) { return String(n).padStart(2, '0'); };
+    return p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + ':' + p(d.getUTCSeconds());
+  }
+  $('selfBtn').addEventListener('click', function () {
+    if (!selfInfo || !selfInfo.allowed) return;
+    openSheet('<h3>🕘 내 출근 체크</h3><div class="muted">QR 없이 지금 누른 시각으로 기록됩니다.</div>' +
+      '<div class="selfBig"><div class="clk" id="selfClk">' + nowKstText() + '</div>' +
+      '<div class="who">' + esc(selfInfo.name) + ' · ' + esc(selfInfo.siteName || selfInfo.site || '') + ' · ' + esc(selfInfo.empNo) + '</div></div>' +
+      '<div class="acts"><button class="prim" id="selfGo">✅ 지금 출근 체크</button><button id="selfNo" style="text-align:center">취소</button></div>' +
+      '<div class="err hidden" id="selfErr"></div>');
+    if (clkTimer) clearInterval(clkTimer);
+    clkTimer = setInterval(function () { if (!$('selfClk')) { clearInterval(clkTimer); return; } $('selfClk').textContent = nowKstText(); }, 1000);
+    $('selfNo').addEventListener('click', closeSheet);
+    $('selfGo').addEventListener('click', async function () {
+      var b = $('selfGo');
+      b.disabled = true; b.textContent = '⏳ 기록 중...';
+      try {
+        var res = await call('selfCheckin');
+        var r = res.record;
+        var t = String(r.time).substring(0, 5);
+        var msg = res.duplicate ? '이미 ' + (r.shift === '퇴근' ? '퇴근' : '출근') + ' 처리되어 있어요 (' + t + ')'
+          : r.shift === '퇴근' ? '🏠 퇴근 완료 ' + t
+          : isLate(r) ? '⏰ 당일 출근 ' + t + ' (지연 ' + fmtDelay(r.delay) + ')' : '✅ 출근 완료 ' + t;
+        closeSheet();
+        toast(msg);
+        data = null;
+        loadToday();
+      } catch (e) {
+        $('selfErr').textContent = e.message; $('selfErr').classList.remove('hidden');
+        b.disabled = false; b.textContent = '✅ 지금 출근 체크';
+      }
+    });
+  });
 
   /* ── 시작 ── */
   function startApp() {
