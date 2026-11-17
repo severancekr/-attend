@@ -49,6 +49,12 @@
   .dots::after { content:''; animation:dots 1.4s steps(4) infinite; }
   @keyframes dots { 0% { content:''; } 25% { content:'.'; } 50% { content:'..'; } 75% { content:'...'; } }
   button.sub { width:100%; margin-top:10px; padding:14px; font-size:16px; font-weight:700; border:1px solid var(--line); border-radius:14px; background:var(--card); color:var(--text); }
+  /* v2.6 PIN */
+  input.pin { width:100%; padding:14px 12px; font-size:26px; letter-spacing:14px; text-align:center; border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--text); font-weight:800; }
+  .pinbox { background:rgba(22,163,74,.08); border-radius:12px; padding:12px 12px 14px; margin-top:14px; text-align:left; }
+  .pinbox b.t { display:block; font-size:15px; margin-bottom:4px; }
+  .small { font-size:12.5px; color:var(--sub); line-height:1.5; }
+  a.link { color:var(--sub); font-size:13px; }
   button.main .bspin { display:inline-block; width:16px; height:16px; margin-right:8px; vertical-align:-2px; border:3px solid rgba(255,255,255,.4); border-top-color:#fff; border-radius:50%; animation:sp 0.9s linear infinite; }
 </style>
 </head>
@@ -107,6 +113,7 @@
   var TOKEN_KEY = 'att_device_token';
   var $ = function (id) { return document.getElementById(id); };
   var regCode = null;
+  var lastQR = null;          // v2.6: 등록 정보가 없을 때 찍은 근무지 QR (PIN 복구는 근무지에서 QR을 찍은 경우만)
 
   var company = (ATT.cfg.COMPANY_NAME || '회사');
   var contact = (ATT.cfg.CONTACT || '관리자');
@@ -291,6 +298,20 @@
   }
 
   function isIOS() { return /iPhone|iPad|iPod/i.test(navigator.userAgent || ''); }
+  // v2.6 재등록 원인 확인용 (휴대폰 종류·브라우저·비공개 모드 등, 개인정보 없음)
+  function osText() {
+    var ua = navigator.userAgent || '', m;
+    if ((m = ua.match(/OS (\d+)[_.](\d+)/)) && /iPhone|iPad|iPod/.test(ua)) return '아이폰 iOS ' + m[1] + '.' + m[2];
+    if ((m = ua.match(/Android (\d+(?:\.\d+)?)/))) return '안드로이드 ' + m[1];
+    return /Windows/.test(ua) ? 'PC' : '기타';
+  }
+  async function regDiag() {
+    var standalone = false;
+    try { standalone = !!(navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches)); } catch (e) { }
+    var priv = false;
+    try { priv = await detectPrivate(); } catch (e) { }
+    return { os: osText(), browser: browserName(), priv: priv, standalone: standalone, storage: ATT.store.works(), hadToken: !!ATT.store.get(TOKEN_KEY) };
+  }
   function iosOtherBrowser() { return isIOS() && /CriOS|FxiOS|EdgiOS|Whale/i.test(navigator.userAgent || ''); }
 
   /* ── 등록 ── */
@@ -339,26 +360,40 @@
   }
 
   // 이미 등록된 사번·이름을 입력했을 때: 진짜 재등록인지 확인 (취소하면 아무것도 바뀌지 않음)
+  //  v2.6: 관리자가 PIN 복구를 켠 직원 → PIN을 정해 둔 경우 PIN으로 바로 복구 / 아직 없으면 이번 재등록 때 PIN 정하기
   function askReRegister(res, name, empNo, token) {
+    if (res.pin === 'set') { askPin(res, name, empNo, token); return; }
+    var setup = res.pin === 'setup';
     info('📱', '이미 등록된 직원이에요',
       '<b>' + ATT.esc(res.name || name) + '</b>님(사번 ' + ATT.esc(empNo) + ')은 <b>이미 출근 등록이 되어 있어요.</b><br><br>' +
       '<div class="note" style="text-align:left;line-height:1.7">' +
       '✅ <b>휴대폰을 바꿨거나</b>, 앱·방문 기록 삭제 등으로 <b>등록이 지워진 경우</b>에만 [재등록 신청]을 누르세요.<br>' +
       '🔄 재등록은 <b>관리자 승인 후</b> 이 휴대폰으로 출근할 수 있어요. 승인 전까지는 예전 휴대폰으로 출근이 됩니다.<br>' +
       '❌ 잘못 들어온 경우(출근하려다 기다리는 중에 누른 경우 등)는 <b>[취소]</b>를 누르고, 근무지 화면의 QR을 <b>"카메라" 앱</b>으로 다시 찍어주세요.</div>' +
+      (setup ? '<div class="pinbox"><b class="t">🔑 PIN 4자리 정하기</b>' +
+        '<div class="small">관리자가 <b>PIN 복구</b>를 켜 두었어요. 지금 PIN을 정해 두면, 다음부터는 등록이 지워져도 ' +
+        '<b>관리자 승인 없이 PIN으로 바로 복구</b>돼요. (이번 한 번만 승인 필요)</div>' +
+        '<label class="f" for="pin1">PIN (숫자 4자리)</label><input class="pin" id="pin1" type="password" inputmode="numeric" maxlength="4" autocomplete="off">' +
+        '<label class="f" for="pin2">PIN 한 번 더</label><input class="pin" id="pin2" type="password" inputmode="numeric" maxlength="4" autocomplete="off">' +
+        '<div class="small" style="margin-top:6px">※ 0000·1234 같은 쉬운 숫자는 안 돼요. 다른 사람에게 알려주지 마세요.</div></div>' : '') +
       '<button class="main" id="rrOk">재등록 신청</button>' +
       '<button class="sub" id="rrCancel">취소</button>' +
       '<div class="err hidden" id="rrErr"></div>');
-    $('rrCancel').addEventListener('click', function () {
-      info('👌', '취소했어요', '등록은 그대로예요. 아무것도 바뀌지 않았어요.<br>출근은 근무지 화면의 QR을 <b>"카메라" 앱</b>으로 찍어주세요.');
-    });
+    $('rrCancel').addEventListener('click', cancelled);
     $('rrOk').addEventListener('click', async function () {
+      var newPin = null;
+      if (setup) {
+        var p1 = $('pin1').value.trim(), p2 = $('pin2').value.trim();
+        var bad = !/^\d{4}$/.test(p1) ? 'PIN은 숫자 4자리로 정해주세요.' : p1 !== p2 ? '두 PIN이 서로 달라요. 다시 입력해주세요.' : '';
+        if (bad) { $('rrErr').textContent = bad; $('rrErr').classList.remove('hidden'); return; }
+        newPin = p1;
+      }
       var b = $('rrOk');
       b.disabled = true; $('rrCancel').disabled = true;
       b.innerHTML = '<span class="bspin"></span>신청 중...';
       try {
         var r2 = await ATT.api('register', { code: null, name: name, empNo: empNo, token: token, consent: true,
-          consentVersion: CONSENT_VERSION, reRegister: true, oldToken: ATT.store.get(TOKEN_KEY) || '' }, 45000);
+          consentVersion: CONSENT_VERSION, reRegister: true, oldToken: ATT.store.get(TOKEN_KEY) || '', diag: await regDiag(), qr: lastQR, newPin: newPin }, 45000);
         if (!r2.ok) throw new Error(r2.error);
         registered(r2, token);
       } catch (e) {
@@ -369,6 +404,44 @@
       }
     });
   }
+  function cancelled() {
+    info('👌', '취소했어요', '등록은 그대로예요. 아무것도 바뀌지 않았어요.<br>출근은 근무지 화면의 QR을 <b>"카메라" 앱</b>으로 찍어주세요.');
+  }
+  // v2.6 PIN으로 바로 복구
+  function askPin(res, name, empNo, token) {
+    var noQR = !lastQR;
+    info('🔑', 'PIN으로 바로 복구할 수 있어요',
+      '<b>' + ATT.esc(res.name || name) + '</b>님은 <b>PIN 복구</b>가 켜져 있어요.<br>처음에 정한 <b>PIN 4자리</b>를 넣으면 관리자 승인 없이 이 휴대폰으로 바로 바뀌어요.' +
+      (noQR ? '<div class="note" style="text-align:left">⚠ PIN 복구는 <b>근무지 화면의 QR을 "카메라" 앱으로 찍어서</b> 열린 화면에서만 돼요. 근무지에서 QR을 찍고 다시 해주세요.</div>' : '') +
+      '<label class="f" for="pinIn" style="text-align:left">PIN (숫자 4자리)</label>' +
+      '<input class="pin" id="pinIn" type="password" inputmode="numeric" maxlength="4" autocomplete="off">' +
+      '<button class="main" id="pinGo">🔑 PIN으로 복구</button>' +
+      '<div class="err hidden" id="pinErr"></div>' +
+      '<button class="sub" id="pinForgot">PIN을 잊었어요 → 재등록 신청 (관리자 승인)</button>' +
+      '<button class="sub" id="pinCancel">취소</button>' +
+      '<div class="small" style="margin-top:12px;text-align:left">※ PIN 복구는 한 달에 3번까지 돼요. 5번 틀리면 1시간 동안 잠겨요.<br>※ 등록이 자주 지워지면 사파리 <b>비공개 모드</b>를 끄고, 출근 완료 화면에서 <b>[확인]</b>을 눌러주세요.</div>');
+    $('pinCancel').addEventListener('click', cancelled);
+    $('pinForgot').addEventListener('click', function () { askReRegister({ name: res.name, pin: '' }, name, empNo, token); });
+    $('pinIn').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('pinGo').click(); });
+    $('pinGo').addEventListener('click', async function () {
+      var pin = $('pinIn').value.trim();
+      if (!/^\d{4}$/.test(pin)) { $('pinErr').textContent = 'PIN 숫자 4자리를 입력해주세요.'; $('pinErr').classList.remove('hidden'); return; }
+      var b = $('pinGo');
+      b.disabled = true; b.innerHTML = '<span class="bspin"></span>확인 중...';
+      try {
+        var r2 = await ATT.api('register', { code: null, name: name, empNo: empNo, token: token, consent: true,
+          consentVersion: CONSENT_VERSION, reRegister: true, oldToken: ATT.store.get(TOKEN_KEY) || '', diag: await regDiag(), qr: lastQR, pin: pin }, 45000);
+        if (!r2.ok) throw new Error(r2.error);
+        registered(r2, token);
+      } catch (e) {
+        $('pinErr').textContent = e.message;
+        $('pinErr').classList.remove('hidden');
+        $('pinIn').value = '';
+        b.disabled = false; b.innerHTML = '🔑 PIN으로 복구';
+      }
+    });
+    setTimeout(function () { try { $('pinIn').focus(); } catch (e) { } }, 200);
+  }
 
   // 등록 결과 화면
   function registered(res, token) {
@@ -377,6 +450,22 @@
       return;
     }
     ATT.store.set(TOKEN_KEY, token);
+    if (res.recovered) {                // v2.6 PIN 자동 복구
+      var ck = res.checkin;
+      if (ck && ck.ok && ck.record) {
+        var rr = ck.record;
+        info('🔑', '복구하고 출근까지 완료!', ATT.esc(res.name) + '님, 이 휴대폰으로 바로 바뀌었어요.' +
+          (ck.duplicate ? '<br>이번 근무 출근은 이미 처리되어 있어요.' : ''),
+          row('이름', rr.name) + row('근무일', rr.date + ' (' + rr.wd + ')') + row('구분', rr.shift === '퇴근' ? '퇴근' : rr.shift + ' 출근') +
+          row(rr.shift === '퇴근' ? '퇴근 시각' : '출근 시각', rr.time) + row('근무지', rr.siteName) + confirmBtnHtml());
+        bindConfirm();
+      } else {
+        info('🔑', '복구 완료!', ATT.esc(res.name) + '님, 이 휴대폰으로 바로 바뀌었어요.<br><b>근무지 화면의 새 QR을 "카메라" 앱으로 한 번 더 찍으면</b> 출근이 기록돼요.' +
+          confirmBtnHtml());
+        bindConfirm();
+      }
+      return;
+    }
     var where = '<div class="note" style="text-align:left;margin-top:12px">📱 <b>' + browserName() + '</b>에 등록되었어요.<br>' +
       '앞으로도 <b>휴대폰 기본 카메라</b>로 QR을 찍어 ' + ro(browserName()) + ' 열리면 출근이 기록돼요.' +
       (isIOS() ? '<br>※ QR은 꼭 <b>"카메라" 앱</b>으로 찍어주세요 (제어 센터 "코드 스캐너"·카카오톡·네이버·구글 앱 X).<br>※ 사파리 <b>비공개 모드</b>, 방문 기록·웹사이트 데이터 삭제를 하면 등록이 사라져요.' : '') +
@@ -384,7 +473,8 @@
     if (res.status === '사용중') {
       info('🎉', '등록 완료!', ATT.esc(res.name) + '님, 이제부터 근무지 화면의 QR을 <b>휴대폰 기본 카메라</b>로 찍으면 바로 출근이 기록됩니다.' + where);
     } else if (res.status === '재등록대기') {
-      info('📝', '재등록 신청 완료', ATT.esc(res.name) + '님의 <b>새 휴대폰 등록 신청</b>이 접수되었어요.<br><b>관리자 승인 후</b> 이 휴대폰으로 출근할 수 있어요.' + where);
+      info('📝', '재등록 신청 완료', ATT.esc(res.name) + '님의 <b>새 휴대폰 등록 신청</b>이 접수되었어요.<br><b>관리자 승인 후</b> 이 휴대폰으로 출근할 수 있어요.' +
+        (res.pinSaved ? '<div class="pinbox"><b class="t">🔑 PIN도 함께 정했어요</b><div class="small">승인되면 다음부터는 등록이 지워져도 PIN으로 바로 복구돼요. PIN을 잊지 마세요.</div></div>' : '') + where);
     } else {
       info('📝', '등록 신청 완료', ATT.esc(res.name) + '님의 등록 신청이 접수되었어요.<br><b>관리자 승인 후</b> QR 출근을 사용할 수 있어요.' + where);
     }
@@ -403,7 +493,7 @@
     var token = ATT.randomHex(32);
     try {
       var res = await ATT.api('register', { code: regCode, name: name, empNo: empNo, token: token, consent: true,
-        consentVersion: CONSENT_VERSION, oldToken: ATT.store.get(TOKEN_KEY) || '' }, 45000);
+        consentVersion: CONSENT_VERSION, oldToken: ATT.store.get(TOKEN_KEY) || '', diag: await regDiag(), qr: lastQR }, 45000);
       setBtnBusy(false);
       if (!res.ok && res.code === 'ALREADY_REGISTERED') { askReRegister(res, name, empNo, token); return; }
       if (!res.ok) throw new Error(res.error);
@@ -442,26 +532,44 @@
         row(isOut ? '퇴근 시각' : '출근 시각', r.time) + row('근무지', r.siteName);
       if (res.duplicate) {
         info('ℹ️', isOut ? '이미 퇴근 처리되었어요' : '이미 출근 처리되었어요',
-          isOut ? '오늘 퇴근은 처음 찍은 시각으로 기록되어 있어요.' : '이번 근무의 출근은 처음 찍은 시각으로 기록되어 있어요.', rows);
+          isOut ? '오늘 퇴근은 처음 찍은 시각으로 기록되어 있어요.' : '이번 근무의 출근은 처음 찍은 시각으로 기록되어 있어요.', rows + confirmBtnHtml());
       } else if (isOut) {
-        info('🏠', '퇴근 완료!', '오늘도 수고 많으셨어요. 조심히 들어가세요!', rows);
+        info('🏠', '퇴근 완료!', '오늘도 수고 많으셨어요. 조심히 들어가세요!', rows + confirmBtnHtml());
         try { if (navigator.vibrate) navigator.vibrate(120); } catch (e) { }
       } else {
-        info('✅', '출근 완료!', '좋은 하루 보내세요!', rows);
+        info('✅', '출근 완료!', '좋은 하루 보내세요!', rows + confirmBtnHtml());
         try { if (navigator.vibrate) navigator.vibrate(120); } catch (e) { }
       }
+      bindConfirm();
       return;
     }
     if (res.code === 'QR_EXPIRED') {
       info('⌛', 'QR 유효 시간이 지났어요', '근무지 화면에 보이는 <b>새 QR</b>을 다시 찍어주세요.');
     } else if (res.code === 'NOT_REGISTERED') {
       ATT.store.del(TOKEN_KEY);
+      lastQR = { s: s, w: w, c: c };
       startRegister(null, '등록 정보가 없어요(휴대폰 변경, 관리자 초기화 등). 다시 등록해주세요.');
     } else if (res.code === 'PENDING') {
       info('⏳', '관리자 승인을 기다리는 중이에요', ATT.esc(res.error || '') + '<br>승인되면 바로 QR 출근을 사용할 수 있어요. 급하면 ' + ATT.esc(contact) + '에게 말씀해주세요.');
     } else {
       info('⚠️', '출근 처리에 실패했어요', ATT.esc(res.error || '알 수 없는 오류'));
     }
+  }
+
+  // v2.6 출근 완료 화면의 [확인] 버튼 - 아이폰 사파리는 화면을 한 번 눌러야 '사용한 사이트'로 보고 등록(저장 정보)을 오래 지켜줌
+  function confirmBtnHtml() {
+    return '<button class="main" id="okBtn" style="margin-top:18px">확인</button>' +
+      (isIOS() ? '<div class="small" style="text-align:center;margin-top:8px">아이폰은 <b>[확인]</b>을 눌러야 이 휴대폰 등록이 오래 유지돼요</div>' : '');
+  }
+  function bindConfirm() {
+    var b = $('okBtn');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      try { ATT.store.set('att_last_ok', String(Date.now())); } catch (e) { }
+      b.textContent = '✔ 확인했어요 · 화면을 닫아도 돼요';
+      b.disabled = true;
+      setTimeout(function () { try { window.close(); } catch (e) { } }, 600);
+    });
   }
 
   /* ── 시작 ── */
@@ -478,6 +586,7 @@
     if (reg) { openRegLink(reg.trim().toUpperCase(), token); return; }
     if (s && w && c) {
       if (token) { doCheckin(token, s, w, c); return; }
+      lastQR = { s: s, w: w, c: c };
       startRegister(null, '이 휴대폰(' + browserName() + ')에는 등록 정보가 없어요. 먼저 등록해주세요.<br>' +
         '<span style="font-size:13px">예전에 등록했는데 이 화면이 보이면: 등록할 때와 <b>다른 앱·브라우저</b>로 열렸거나, <b>비공개 모드</b>이거나, ' +
         '<b>방문 기록을 지운</b> 경우예요. QR은 <b>"카메라" 앱</b>으로 찍어주세요. 아래에서 다시 등록하면 관리자 승인 후 사용할 수 있어요.<br>' +
