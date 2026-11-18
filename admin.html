@@ -541,7 +541,8 @@
       return '<div class="person ' + cls + '"><div class="tm">' + esc(x.start || '-') + '</div>' +
         '<div class="who"><b>' + esc(x.name) + '</b>' + (x.group ? ' <span class="badge g">' + esc(x.group) + '조</span>' : '') +
         (x.sched === '주간' || x.sched === '야간' ? ' <span class="badge ' + (x.sched === '야간' ? 'n' : 'd') + '">' + esc(x.sched) + '</span>' : '') +
-        (x.duty ? ' <span class="badge c">' + esc(x.duty) + '</span>' : '') + habTxt(x) +
+        (x.duty ? ' <span class="badge c">' + esc(x.duty) + '</span>' : '') +
+        (/더블$/.test(x.dutyLabel || '') ? ' <small class="muted">' + esc(x.dutyLabel) + (x.start && x.start !== '08:00' ? ' ' + esc(x.start) : '') + '</small>' : '') + habTxt(x) +
         '<div>' + esc(x.area ? x.area + ' · ' : '') + esc(x.siteName) + ' · ' + esc(x.empNo) + '</div></div>' + st + '</div>';
     };
     miss.sort(function (a, b) { return (isHab(b) ? 1 : 0) - (isHab(a) ? 1 : 0); });
